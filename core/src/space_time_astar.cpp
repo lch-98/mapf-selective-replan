@@ -19,7 +19,9 @@ int manhattan_distance(Cell a, Cell b) {
     return std::abs(a.x - b.x) + std::abs(a.y - b.y);
 }
 
-// 탐색 트리의 한 노드. g는 지금까지 온 시간(=칸 수), h는 휴리스틱.
+// 탐색 트리의 한 노드. g는 지금까지 걸린 타임스텝(턴) 수, h는 휴리스틱.
+// 대기(wait)도 한 턴을 쓰므로 이동과 똑같이 g에 +1된다 — "칸 수"가 아니라
+// "시간(비용)"이 g의 정확한 의미다.
 // parent로 부모 노드를 가리켜서, goal에 도착했을 때 경로를 거슬러 올라간다.
 struct Node {
     SpaceTimeCell cell;
@@ -59,10 +61,12 @@ Path reconstruct_path(const std::shared_ptr<Node>& goal_node) {
 
 }  // namespace
 
+// 생성자 생성
 SpaceTimeAStar::SpaceTimeAStar(const Map& map, const ReservationTable& reservations,
                                 AStarConfig config)
     : map_(map), reservations_(reservations), config_(config) {}
 
+// search_with_diagnostics의 wrapper 함수 > 경로만 반환할 때 사용
 std::optional<Path> SpaceTimeAStar::search(Cell start, Cell goal, int start_time) const {
     return search_with_diagnostics(start, goal, start_time).path;
 }
@@ -71,8 +75,7 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal,
                                                      int start_time) const {
     AStarResult result;
 
-    std::priority_queue<std::shared_ptr<Node>, std::vector<std::shared_ptr<Node>>, NodeCompare>
-        open;
+    std::priority_queue<std::shared_ptr<Node>, std::vector<std::shared_ptr<Node>>, NodeCompare> open;
     std::unordered_set<SpaceTimeCell, VisitedHash> visited;
 
     auto start_node = std::make_shared<Node>();
