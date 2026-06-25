@@ -65,8 +65,17 @@ public:
     // 정확히 유지되지만, 누구 것인지는 추적하지 않는다는 뜻이다.
     void reserve(int x, int y, int t, int agent_id = -1);
 
-    // (x,y,t)의 점유 기록을 지운다.
+    // (x,y,t)의 점유 기록을 지운다 — 누구 것이든 무조건 지운다.
     void unreserve(int x, int y, int t);
+
+    // (x,y,t)의 주인이 정확히 agent_id일 때만 지운다. 주인이 다르거나
+    // 점유가 없으면 아무 일도 하지 않는다.
+    //
+    // 왜 필요한가: PBS(05장)가 "내 목적지의 임시 선점만 풀겠다"고 할 때,
+    // 만약 그 칸에 이미 다른 로봇의 Tail Reservation(영구 점유)이 걸려
+    // 있다면 unreserve()로는 그것까지 같이 지워버린다 — 그건 잘못이다.
+    // 이 함수는 "내가 등록한 것만 정확히 골라서" 지우게 해준다.
+    void unreserve_if_owned_by(int x, int y, int t, int agent_id);
 
     // (x,y,t)가 누군가에게 점유되어 있는가?
     bool is_occupied(int x, int y, int t) const;

@@ -15,6 +15,13 @@ void ReservationTable::unreserve(int x, int y, int t) {
     vertices_.erase(VertexKey{x, y, t});
 }
 
+void ReservationTable::unreserve_if_owned_by(int x, int y, int t, int agent_id) {
+    auto it = vertices_.find(VertexKey{x, y, t});
+    if (it != vertices_.end() && it->second == agent_id) {
+        vertices_.erase(it);
+    }
+}
+
 bool ReservationTable::is_occupied(int x, int y, int t) const {
     return vertices_.find(VertexKey{x, y, t}) != vertices_.end();
 }

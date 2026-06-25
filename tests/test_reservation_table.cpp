@@ -40,6 +40,20 @@ TEST(ReservationTableTest, UnreserveClearsOccupancy) {
     EXPECT_EQ(table.get_owner(1, 1, 0), std::nullopt);
 }
 
+TEST(ReservationTableTest, UnreserveIfOwnedByOnlyRemovesMatchingOwner) {
+    ReservationTable table;
+    table.reserve(1, 1, 0, 5);
+
+    // 주인이 다르면 지워지지 않는다.
+    table.unreserve_if_owned_by(1, 1, 0, 9);
+    EXPECT_TRUE(table.is_occupied(1, 1, 0));
+    EXPECT_EQ(table.get_owner(1, 1, 0), 5);
+
+    // 주인이 맞으면 지워진다.
+    table.unreserve_if_owned_by(1, 1, 0, 5);
+    EXPECT_FALSE(table.is_occupied(1, 1, 0));
+}
+
 TEST(ReservationTableTest, ReservationIsIsolatedByCoordinateAndTime) {
     ReservationTable table;
     table.reserve(1, 1, 0, 5);
