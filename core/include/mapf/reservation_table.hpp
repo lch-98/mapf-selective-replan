@@ -63,7 +63,21 @@ public:
     // (x,y,t)를 agent_id가 점유한다고 기록한다.
     // agent_id를 생략하면 -1("주인 모름")로 기록된다 — 점유 여부는 여전히
     // 정확히 유지되지만, 누구 것인지는 추적하지 않는다는 뜻이다.
+    //
+    // 주의: 이미 다른 agent_id가 점유한 칸이라도 무조건 덮어쓴다. 호출하는
+    // 쪽이 "여기는 비어있거나 내 것"이라고 이미 확신할 때만 써야 한다.
     void reserve(int x, int y, int t, int agent_id = -1);
+
+    // (x,y,t)가 비어있거나 이미 agent_id 자신의 것일 때만 예약한다.
+    // 이미 다른 agent_id가 점유한 칸이면 아무 일도 하지 않고 false를
+    // 반환한다 — reserve()와 달리 절대 남의 점유를 덮어쓰지 않는다.
+    //
+    // 왜 필요한가: PBS(05장)의 register_path가 Tail Reservation(도착
+    // 시각부터 max_timestep까지 목적지를 미리 채워두는 것)을 걸 때, 그
+    // 범위 안에 이미 다른(더 높은 순위) 로봇이 정당하게 등록해둔 vertex가
+    // 있다면 절대 지우면 안 된다. reserve()를 그대로 쓰면 무조건 덮어써서
+    // 그 로봇의 점유 기록이 사라지는 버그가 생긴다.
+    bool reserve_if_unowned(int x, int y, int t, int agent_id);
 
     // (x,y,t)의 점유 기록을 지운다 — 누구 것이든 무조건 지운다.
     void unreserve(int x, int y, int t);

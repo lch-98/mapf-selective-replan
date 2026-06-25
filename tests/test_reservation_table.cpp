@@ -54,6 +54,29 @@ TEST(ReservationTableTest, UnreserveIfOwnedByOnlyRemovesMatchingOwner) {
     EXPECT_FALSE(table.is_occupied(1, 1, 0));
 }
 
+TEST(ReservationTableTest, ReserveIfUnownedRefusesToOverwriteOtherOwner) {
+    ReservationTable table;
+    table.reserve(1, 1, 0, 5);
+
+    // 이미 다른 agent_id(5)가 점유 중이면 덮어쓰지 않고 false를 반환한다.
+    bool ok = table.reserve_if_unowned(1, 1, 0, 9);
+    EXPECT_FALSE(ok);
+    EXPECT_EQ(table.get_owner(1, 1, 0), 5);
+}
+
+TEST(ReservationTableTest, ReserveIfUnownedSucceedsWhenEmptyOrSameOwner) {
+    ReservationTable table;
+
+    // 비어있으면 성공한다.
+    EXPECT_TRUE(table.reserve_if_unowned(1, 1, 0, 5));
+    EXPECT_EQ(table.get_owner(1, 1, 0), 5);
+
+    // 이미 자기 자신의 것이면 다시 호출해도 성공한다(같은 칸을 여러 시각
+    // 반복 예약하는 Tail Reservation 루프에서 필요한 동작).
+    EXPECT_TRUE(table.reserve_if_unowned(1, 1, 0, 5));
+    EXPECT_EQ(table.get_owner(1, 1, 0), 5);
+}
+
 TEST(ReservationTableTest, ReservationIsIsolatedByCoordinateAndTime) {
     ReservationTable table;
     table.reserve(1, 1, 0, 5);

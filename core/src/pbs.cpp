@@ -23,9 +23,15 @@ void PBS::register_path(int agent_id, const Path& path) {
 
     // Tail Reservation: 도착 시각부터 max_timestep까지, 목적지 칸을
     // 계속 이 로봇이 차지하고 있다고 가정해 추가로 예약한다.
+    //
+    // reserve_if_unowned를 쓰는 이유: 이 로봇의 경로는 A*가 이미 등록된
+    // 점유와 충돌하지 않게 찾은 것이지만, Tail 구간(도착 이후의 미래
+    // 시각)은 A*가 직접 검증한 범위가 아니다. 만약 그 구간에 이미 다른
+    // (더 높은 순위) 로봇이 정당하게 등록해둔 vertex가 있다면, 그건 이
+    // 로봇이 아직 거기 있다는 뜻이므로 절대 덮어쓰면 안 된다.
     const SpaceTimeCell& last = path.back();
     for (int t = last.t; t <= config_.max_timestep; ++t) {
-        table_.reserve(last.x, last.y, t, agent_id);
+        table_.reserve_if_unowned(last.x, last.y, t, agent_id);
     }
 }
 

@@ -120,3 +120,36 @@ TEST(PBSTest, HigherPriorityAgentMayPassThroughFutureGoalOfLowerPriority) {
     EXPECT_EQ((*result)[0].back(), (SpaceTimeCell{2, 0, 2}));
     EXPECT_EQ((*result)[1].front(), (SpaceTimeCell{1, 0, 0}));
 }
+
+TEST(PBSTest, LowerPriorityTailReservationDoesNotErasePriorAgentVertex) {
+    // 1x3 세로 통로: (0,0)-(0,1)-(0,2).
+    // 로봇0(1순위): (0,0)->(0,2) — (0,1)을 t=1에 "지나간다"(도착이 아님).
+    // 로봇1(2순위): (0,1)->(0,1) — 제자리. t=0에 이미 도착해서, register_path의
+    //   Tail Reservation 루프가 t=0부터 max_timestep까지 (0,1)을 훑는다 —
+    //   그 범위 안에 로봇0이 t=1에 등록해둔 vertex가 포함된다.
+    //
+    // 만약 Tail 루프가 무조건 덮어썼다면 (0,1,1)의 주인이 1로 바뀌어,
+    // 로봇0의 점유 기록이 사라지는 버그가 생긴다. 이걸 로봇2를 하나 더
+    // 추가해서 검증한다: 로봇2(3순위)가 (0,1)을 t=1에 쓰려고 시도하면,
+    // 그 자리는 (오염되지 않았다면) 여전히 로봇0의 것으로 막혀 있어야 하고,
+    // 로봇2는 그 시각을 피해서 우회/대기해야 한다.
+    Map map(2, 3);  // (0,*) 통로 + (1,*) 옆 칸 — 로봇2가 돌아갈 공간.
+    PBS pbs(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 0}, Cell{0, 2}},
+        Agent{1, Cell{0, 1}, Cell{0, 1}},
+        Agent{2, Cell{1, 1}, Cell{1, 0}},
+    };
+
+    auto result = pbs.plan(agents);
+
+    ASSERT_TRUE(result.has_value());
+    // 로봇0의 경로는 그대로 유지되어야 한다 — 누구의 Tail에도 침범당하지 않음.
+    EXPECT_EQ((*result)[0].back(), (SpaceTimeCell{0, 2, 2}));
+    for (const auto& cell : (*result)[0]) {
+        // 로봇0이 차지한 (칸,시각)은 로봇1/로봇2의 경로와 절대 겹치지 않아야 한다.
+        for (const auto& other : (*result)[1]) EXPECT_FALSE(cell == other);
+        for (const auto& other : (*result)[2]) EXPECT_FALSE(cell == other);
+    }
+}

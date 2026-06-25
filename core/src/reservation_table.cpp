@@ -22,6 +22,16 @@ void ReservationTable::unreserve_if_owned_by(int x, int y, int t, int agent_id) 
     }
 }
 
+bool ReservationTable::reserve_if_unowned(int x, int y, int t, int agent_id) {
+    VertexKey key{x, y, t};
+    auto it = vertices_.find(key);
+    if (it != vertices_.end() && it->second != agent_id) {
+        return false;  // 이미 다른 로봇의 것 — 덮어쓰지 않는다.
+    }
+    vertices_[key] = agent_id;
+    return true;
+}
+
 bool ReservationTable::is_occupied(int x, int y, int t) const {
     return vertices_.find(VertexKey{x, y, t}) != vertices_.end();
 }
