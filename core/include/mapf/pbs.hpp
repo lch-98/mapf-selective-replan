@@ -32,11 +32,6 @@ public:
     std::optional<PBSResult> plan(const std::vector<Agent>& agents);
 
 private:
-    // plan() 시작 시 한 번, 모든 로봇의 목적지를 t=0~max_timestep까지
-    // 미리 선점한다 — "아직 차례가 안 온 로봇"의 목적지를 다른 로봇이
-    // 그냥 지나가는 길로 침범하지 못하게 막는다(05장 5.6절).
-    void reserve_all_goals(const std::vector<Agent>& agents);
-
     // 경로를 테이블에 등록한다: 모든 (칸,시각)과 모든 이동을 등록하고,
     // 마지막으로 목적지 칸을 도착 시각부터 max_timestep까지 추가로
     // 예약한다(Tail Reservation, 05장 5.5절) — "도착 후에는 그 자리에

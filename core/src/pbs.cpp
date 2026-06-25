@@ -9,14 +9,6 @@ namespace mapf {
 
 PBS::PBS(const Map& map, AStarConfig config) : map_(map), config_(config) {}
 
-void PBS::reserve_all_goals(const std::vector<Agent>& agents) {
-    for (const Agent& agent : agents) {
-        for (int t = 0; t <= config_.max_timestep; ++t) {
-            table_.reserve(agent.goal.x, agent.goal.y, t, agent.id);
-        }
-    }
-}
-
 void PBS::register_path(int agent_id, const Path& path) {
     // 경로의 모든 칸(vertex)과 모든 이동(edge)을 등록한다.
     for (size_t i = 0; i < path.size(); ++i) {
@@ -39,22 +31,10 @@ void PBS::register_path(int agent_id, const Path& path) {
 
 std::optional<PBSResult> PBS::plan(const std::vector<Agent>& agents) {
     table_.clear();
-    reserve_all_goals(agents);
 
     PBSResult result;
 
     for (const Agent& agent : agents) {
-        // 자기 차례가 되면, 자기 목적지의 임시 선점만 풀어준다 — 다른
-        // 로봇들의 목적지 선점은 그대로 유지된다(05장 5.6절).
-        //
-        // unreserve_if_owned_by를 쓰는 이유: 만약 이미 다른 로봇이 이
-        // 칸에 Tail Reservation(영구 점유, 05장 5.5절)을 걸어뒀다면,
-        // 그건 이 agent_id의 것이 아니므로 절대 지우면 안 된다. 무조건
-        // 지우는 unreserve()를 쓰면 그 보호가 깨진다.
-        for (int t = 0; t <= config_.max_timestep; ++t) {
-            table_.unreserve_if_owned_by(agent.goal.x, agent.goal.y, t, agent.id);
-        }
-
         SpaceTimeAStar astar(map_, table_, config_);
         std::optional<Path> path = astar.search(agent.start, agent.goal);
 

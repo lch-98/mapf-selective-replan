@@ -94,12 +94,18 @@ TEST(PBSTest, TailReservationProtectsArrivedAgentForever) {
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSTest, GoalPreReservationBlocksPassThroughBeforeItsTurn) {
+TEST(PBSTest, HigherPriorityAgentMayPassThroughFutureGoalOfLowerPriority) {
     // 3x1 통로: (0,0)-(1,0)-(2,0).
-    // 로봇0(1순위): (0,0)->(2,0) — 통로 전체를 지나가야 한다.
-    // 로봇1(2순위): (1,0)->(1,0) — 제자리(목적지가 통로 중간).
-    //   로봇1의 차례가 아직 안 왔어도, 목적지 임시 선점 때문에 로봇0은
-    //   (1,0)을 "그냥 지나가는 길"로 쓸 수 없고 돌아갈 길이 없으므로 실패해야 한다.
+    // 로봇0(1순위): (0,0)->(2,0) — 통로 전체를 지나가야 한다. 탐색 시점에
+    //   로봇1은 아직 계획되지 않았으므로(차례가 안 옴), 테이블에 아무 정보가
+    //   없어 로봇0은 (1,0)을 t=1에 자유롭게 지나간다.
+    // 로봇1(2순위): (1,0)->(1,0) — 제자리(목적지가 통로 중간). 로봇1이 차례가
+    //   되면 t=0에 이미 거기 있는 것으로 끝나므로, 로봇0이 지나간 t=1과는
+    //   다른 시각이라 충돌하지 않는다.
+    //
+    // "목적지 임시 선점"이 있었다면 로봇0이 (1,0)을 지나가는 것 자체가 막혀
+    // 전체가 실패했을 것이다 — 그 장치를 제거한 지금은 Tail Reservation만으로
+    // 실제 충돌(같은 칸, 같은 시각)이 없으므로 둘 다 성공해야 한다.
     Map map(3, 1);
     PBS pbs(map);
 
@@ -110,5 +116,7 @@ TEST(PBSTest, GoalPreReservationBlocksPassThroughBeforeItsTurn) {
 
     auto result = pbs.plan(agents);
 
-    EXPECT_FALSE(result.has_value());
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ((*result)[0].back(), (SpaceTimeCell{2, 0, 2}));
+    EXPECT_EQ((*result)[1].front(), (SpaceTimeCell{1, 0, 0}));
 }
