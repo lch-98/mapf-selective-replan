@@ -36,7 +36,13 @@ private:
     // 마지막으로 목적지 칸을 도착 시각부터 max_timestep까지 추가로
     // 예약한다(Tail Reservation, 05장 5.5절) — "도착 후에는 그 자리에
     // 영원히 머문다"고 가정해 미래 시각까지 미리 막아두는 것이다.
-    void register_path(int agent_id, const Path& path);
+    //
+    // 반환값: Tail Reservation 구간 전체를 문제없이 등록했으면 true.
+    // 만약 그 구간의 어느 시각에 이미 다른(더 높은 순위) 로봇이 그 칸을
+    // 점유 중이라면, 이 로봇은 도착 후 그 시각에 "영원히 머문다"는 전제
+    // 자체가 거짓이 된다 — 즉 실제로는 풀 수 없는 충돌이다. 이 경우 false를
+    // 반환하고, plan()은 전체를 실패로 처리한다.
+    bool register_path(int agent_id, const Path& path);
 
     const Map& map_;
     AStarConfig config_;

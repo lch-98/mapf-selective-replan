@@ -9,7 +9,7 @@ namespace mapf {
 
 PBS::PBS(const Map& map, AStarConfig config) : map_(map), config_(config) {}
 
-void PBS::register_path(int agent_id, const Path& path) {
+bool PBS::register_path(int agent_id, const Path& path) {
     // 경로의 모든 칸(vertex)과 모든 이동(edge)을 등록한다.
     for (size_t i = 0; i < path.size(); ++i) {
         const SpaceTimeCell& cell = path[i];
@@ -24,15 +24,19 @@ void PBS::register_path(int agent_id, const Path& path) {
     // Tail Reservation: 도착 시각부터 max_timestep까지, 목적지 칸을
     // 계속 이 로봇이 차지하고 있다고 가정해 추가로 예약한다.
     //
-    // reserve_if_unowned를 쓰는 이유: 이 로봇의 경로는 A*가 이미 등록된
-    // 점유와 충돌하지 않게 찾은 것이지만, Tail 구간(도착 이후의 미래
-    // 시각)은 A*가 직접 검증한 범위가 아니다. 만약 그 구간에 이미 다른
-    // (더 높은 순위) 로봇이 정당하게 등록해둔 vertex가 있다면, 그건 이
-    // 로봇이 아직 거기 있다는 뜻이므로 절대 덮어쓰면 안 된다.
+    // reserve_if_unowned를 쓰는 이유: 만약 이 구간의 어느 시각에 이미
+    // 다른(더 높은 순위) 로봇이 정당하게 등록해둔 vertex가 있다면, 그건
+    // 그 로봇이 그 시각에 거기 있다는 뜻이다. 이 로봇이 "도착 후 영원히
+    // 머문다"고 주장하는 것과 정면으로 모순되므로 — 이는 조용히 넘어갈
+    // 문제가 아니라 실제 충돌이다. 그래서 거절(false)이 한 번이라도
+    // 생기면 전체를 실패로 보고한다.
     const SpaceTimeCell& last = path.back();
     for (int t = last.t; t <= config_.max_timestep; ++t) {
-        table_.reserve_if_unowned(last.x, last.y, t, agent_id);
+        if (!table_.reserve_if_unowned(last.x, last.y, t, agent_id)) {
+            return false;
+        }
     }
+    return true;
 }
 
 std::optional<PBSResult> PBS::plan(const std::vector<Agent>& agents) {
@@ -48,7 +52,9 @@ std::optional<PBSResult> PBS::plan(const std::vector<Agent>& agents) {
             return std::nullopt;
         }
 
-        register_path(agent.id, *path);
+        if (!register_path(agent.id, *path)) {
+            return std::nullopt;
+        }
         result[agent.id] = *path;
     }
 
