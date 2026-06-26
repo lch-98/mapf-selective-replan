@@ -25,8 +25,10 @@ void ReservationTable::unreserve_if_owned_by(int x, int y, int t, int agent_id) 
 bool ReservationTable::reserve_if_unowned(int x, int y, int t, int agent_id) {
     VertexKey key{x, y, t};
     auto it = vertices_.find(key);
+    // 정점 점유 못 찾으면(비어있다) False, agent_id가 같으면(다른 로봇이 아니다) False
+    // 즉, 정점 점유 가능
     if (it != vertices_.end() && it->second != agent_id) {
-        return false;  // 이미 다른 로봇의 것 — 덮어쓰지 않는다.
+        return false;  // 이미 다른 로봇의 것(비어있지 않고, 다른 로봇의 정점이다) — 덮어쓰지 않는다.
     }
     vertices_[key] = agent_id;
     return true;

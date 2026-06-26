@@ -34,7 +34,7 @@ struct Node {
 
 struct NodeCompare {
     // 우선순위 큐는 "가장 큰 것"을 꺼내므로, f가 작을수록 먼저 나오게 하려면
-    // 비교를 뒤집어야 한다(>를 쓰면 작은 f가 위로 올라온다).
+    // 비교를 뒤집어야 한다(>를 쓰면 작은 f가 위로 올라온다) 즉, 오름차순 top()이 가장 작은 값을 가짐
     bool operator()(const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) const {
         return a->f() > b->f();
     }
@@ -113,6 +113,8 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal,
                 result.blocked_attempts.push_back(next_cell);
                 continue;
             }
+            // 위 visited.insert()로 최적의 g값을 가지는 칸을 선점 했으므로, 즉 최적의 칸을 저장
+            // 아래 visited.count()는 이미 visited 안의 최적의 칸을 넘어간다는 뜻 (불필요한 연산을 줄이는 최적화)
             if (visited.count(next_cell)) continue;
 
             auto next_node = std::make_shared<Node>();
