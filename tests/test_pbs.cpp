@@ -8,6 +8,33 @@
 
 using namespace mapf;
 
+TEST(PBSTest, RejectsAgentWhoseStartCellIsAlreadyOwnedAtThatTime) {
+    // 3x1 통로: (0,0)-(1,0)-(2,0).
+    // 로봇0(1순위): (1,0)->(0,0). t=0에 (1,0)에서 출발해 t=1에 (0,0)으로
+    //   이동한다. 목적지가 (0,0)이므로 Tail Reservation도 (0,0)에만 걸리고
+    //   (1,0)은 t=0 이후 전혀 보호받지 않는다.
+    // 로봇1(2순위): (1,0)->(1,0) — 제자리. start==goal이라 A*는 시작 칸의
+    //   점유 여부를 검사하지 않고 즉시 "t=0에 도착"으로 판정한다([04장]
+    //   search_with_diagnostics는 다음 칸 이동시에만 점유를 확인한다).
+    //
+    // 로봇0과 로봇1은 실제로 t=0에 동시에 (1,0)에 있다 — 명백한 vertex
+    // conflict. register_path의 vertex 등록 루프가 reserve_if_unowned를
+    // 쓰지 않고 무조건 덮어쓰는 reserve()를 썼다면, 이 충돌이 조용히
+    // 사라지고 plan()이 두 경로를 모두 "성공"으로 반환해버린다 — 그래서
+    // 안 된다는 것을 이 테스트가 고정한다.
+    Map map(3, 1);
+    PBS pbs(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{1, 0}, Cell{0, 0}},
+        Agent{1, Cell{1, 0}, Cell{1, 0}},
+    };
+
+    auto result = pbs.plan(agents);
+
+    EXPECT_FALSE(result.has_value());
+}
+
 TEST(PBSTest, TwoAgentsWithoutConflictBothGetShortestPaths) {
     // 5x1 통로. 로봇0: (0,0)->(1,0). 로봇1: (4,0)->(3,0). 서로 안 겹친다.
     Map map(5, 1);

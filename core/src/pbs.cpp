@@ -11,9 +11,19 @@ PBS::PBS(const Map& map, AStarConfig config) : map_(map), config_(config) {}
 
 bool PBS::register_path(int agent_id, const Path& path) {
     // 경로의 모든 칸(vertex)과 모든 이동(edge)을 등록한다.
+    //
+    // vertex 등록에 reserve_if_unowned를 쓰는 이유: 이 경로는 A*가 이미
+    // 등록된 점유를 피해서 찾은 것이지만, "시작 칸"만은 A*가 점유 검사를
+    // 하지 않는다([04장] search_with_diagnostics는 다음 칸으로 이동할 때만
+    // is_occupied를 확인한다). 만약 이 로봇의 시작 칸이 이미 더 높은
+    // 순위 로봇이 정당하게 차지한 (칸,시각)과 같다면, 그건 실제 vertex
+    // conflict다 — reserve()로 무조건 덮어쓰면 그 충돌이 조용히 사라지고
+    // 이후 단계(Tail 검사 등)에서도 다시는 들키지 않는다.
     for (size_t i = 0; i < path.size(); ++i) {
         const SpaceTimeCell& cell = path[i];
-        table_.reserve(cell.x, cell.y, cell.t, agent_id);
+        if (!table_.reserve_if_unowned(cell.x, cell.y, cell.t, agent_id)) {
+            return false;
+        }
 
         if (i + 1 < path.size()) {
             const SpaceTimeCell& next = path[i + 1];
