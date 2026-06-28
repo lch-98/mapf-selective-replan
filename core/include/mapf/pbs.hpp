@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────
 // core/include/mapf/pbs.hpp
 //
-// 05_pbs.md를 코드로 옮긴 파일. (이번 단계는 plan()만 — replan은 06장/5단계)
+// 05_pbs.md(plan) + 06_selective_replan.md(replan)를 코드로 옮긴 파일.
 //
 // PBS(Priority-Based Search)의 핵심 규칙: 먼저 계획된 로봇의 경로는 절대
 // 바뀌지 않는다. 나중에 계획되는 로봇이 그 경로를 피해서 자기 길을 찾는다.
@@ -23,13 +23,41 @@ namespace mapf {
 // 로봇id → 경로.
 using PBSResult = std::unordered_map<int, Path>;
 
+// PBS::replan의 동작을 조정하는 설정.
+struct PBSConfig {
+    // Tier 1 이후, "막은 원인 로봇"을 몇 단계까지 추적해서 working_ids를
+    // 넓혀볼지(06장 6.6절). 0이면 Tier 0만 시도하고 바로 안전망으로 간다.
+    int max_escalation_tiers{1};
+};
+
+// replan() 한 번의 결과 — 최종 경로 외에, "얼마나 선택적으로 풀렸는지"를
+// 보여주는 디버깅·연구용 정보를 함께 담는다(06장 6.7절).
+struct ReplanResult {
+    PBSResult paths;                  // 최종 전체 경로(영향 안 받은 로봇은 기존 경로 그대로)
+    std::vector<int> replanned_ids;    // 실제로 다시 탐색된 로봇 id 전부
+    int escalation_tier{0};            // 0=Tier 0에서 끝남, 1+=그 단계까지 확장해서 성공, -1=전체 재계획 폴백
+    std::vector<int> rescued_ids{};    // Tier 1+에서 새로 추가된 "구조 로봇" id 목록
+};
+
 class PBS {
 public:
-    PBS(const Map& map, AStarConfig config = AStarConfig{});
+    PBS(const Map& map, AStarConfig config = AStarConfig{}, PBSConfig replan_config = PBSConfig{});
 
     // agents를 순서대로(=우선순위 순으로) 전부 계획한다.
     // 한 로봇이라도 경로를 못 찾으면 전체가 실패(nullopt)한다.
     std::optional<PBSResult> plan(const std::vector<Agent>& agents);
+
+    // 이미 진행 중인 계획(previous_paths)에 new_obstacles가 새로 생겼을 때,
+    // 영향받은 로봇만 선택적으로 다시 계획한다(06장). agents 순서가 곧
+    // 우선순위라는 규칙은 plan()과 동일하게 유지된다.
+    //
+    // Tier 0(영향받은 로봇만) → Tier 1..max_escalation_tiers(막은 원인 로봇을
+    // 추적해서 확장) → 안전망(전체 재계획, 현재 위치 기준)을 순서대로 시도한다.
+    // 안전망까지도 실패하면 nullopt를 반환한다.
+    std::optional<ReplanResult> replan(const std::vector<Agent>& agents,
+                                        const PBSResult& previous_paths,
+                                        const std::vector<Cell>& new_obstacles,
+                                        int current_time);
 
 private:
     // 경로를 테이블에 등록한다: 모든 (칸,시각)과 모든 이동을 등록하고,
@@ -44,8 +72,56 @@ private:
     // 반환하고, plan()은 전체를 실패로 처리한다.
     bool register_path(int agent_id, const Path& path);
 
+    // current_time 시점에 agent_id가 있던 칸. path가 current_time보다
+    // 짧으면(=이미 도착해서 Tail 상태) 목적지 칸을 반환한다(06장 6.4절).
+    static Cell position_at(const Path& path, int current_time);
+
+    // agent_id의 경로(path)가 current_time 이후 시점에 new_obstacles 중
+    // 한 칸과 같은 (칸,시각)에서 겹치는지 확인한다(06장 6.4절 1단계).
+    static bool path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
+                                    int current_time);
+
+    // new_obstacles를 current_time부터 max_timestep까지 영원히 점유된 것으로
+    // 테이블에 등록한다. owner를 지정하지 않아 -1("주인 모름")로 기록되므로,
+    // Tier 1의 get_owner 추적에서 "구조 로봇 후보"로 잘못 잡히지 않는다.
+    void reserve_new_obstacles(const std::vector<Cell>& new_obstacles, int current_time);
+
+    // working_ids에 속한 로봇만 agents 순서대로(=우선순위 순으로) current_time
+    // 시점의 위치에서 원래 목적지까지 다시 탐색한다. working_ids에 없는 로봇은
+    // previous_paths의 기존 경로를 그대로 장벽으로 등록한다(06장 6.4절 2단계,
+    // 6.6.1절 "구조 로봇의 과거 경로를 장벽으로 쓰면 안 된다").
+    //
+    // 성공하면 새 PBSResult를 반환한다(영향 안 받은 로봇=기존 경로, working_ids
+    // 로봇=새로 찾은 경로를 과거 구간과 이어붙인 것). 실패하면 nullopt를 반환하고,
+    // 실패 원인을 두 채널 중 하나로 알려준다(06장 6.6절의 get_owner 추적을
+    // 가능하게 하는 정보):
+    //
+    //   - out_blocked: working_ids 로봇의 A* 탐색 자체가 막혔을 때, 그 막힌
+    //     시공간 칸들(blocked_attempts). 호출하는 쪽이 get_owner로 누가
+    //     막았는지 추적한다.
+    //   - out_blocked_owner: working_ids에 "없는" 로봇을 기존 경로로 barrier
+    //     등록하다가 거절당했을 때, 거절당한 그 로봇의 id 자신. 이 경우는
+    //     "누가 막았는지"가 아니라 "이 로봇이 막혔다"는 사실 자체가 추적
+    //     대상이다 — 거절된 칸의 현재 주인은 이미 working_ids에 있는 로봇이라
+    //     get_owner로는 새 후보를 찾을 수 없기 때문이다.
+    std::optional<PBSResult> try_replan_set(const std::vector<Agent>& agents,
+                                             const PBSResult& previous_paths,
+                                             const std::vector<int>& working_ids,
+                                             const std::vector<Cell>& new_obstacles,
+                                             int current_time,
+                                             std::vector<SpaceTimeCell>* out_blocked,
+                                             std::optional<int>* out_blocked_owner);
+
+    // 안전망: working_ids 구분 없이 agents 전체를, "지금 각자 있는 위치"를
+    // 새 출발점으로 삼아 처음부터 다시 계획한다(06장 6.7절).
+    std::optional<PBSResult> full_replan_fallback(const std::vector<Agent>& agents,
+                                                   const PBSResult& previous_paths,
+                                                   const std::vector<Cell>& new_obstacles,
+                                                   int current_time);
+
     const Map& map_;
     AStarConfig config_;
+    PBSConfig replan_config_;
     ReservationTable table_;
 };
 
