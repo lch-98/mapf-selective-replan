@@ -40,3 +40,4 @@ FetchContent_MakeAvailable(googletest)
 # ── 하위 폴더의 CMakeLists.txt를 실행 ────────────────────────────
 add_subdirectory(core)
 add_subdirectory(tests)
+add_subdirectory(tools)
