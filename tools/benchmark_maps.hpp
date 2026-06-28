@@ -1,0 +1,58 @@
+// ─────────────────────────────────────────────────────────────────
+// tools/benchmark_maps.hpp
+//
+// 벤치마크에서 쓰는 32x32 맵 두 종류를 만든다. 둘 다 ASCII 행 목록을
+// Map(rows) 생성자에 넘기는 방식으로 만든다('#' = 벽, '.' = 빈 칸).
+// ─────────────────────────────────────────────────────────────────
+#pragma once
+
+#include <vector>
+
+#include "mapf/map.hpp"
+
+namespace mapf::bench {
+
+constexpr int kMapSize = 32;
+
+// 맵 1: 넓은 통로. 거의 빈 격자에 3x3 크기의 기둥을 격자 모양으로
+// 몇 군데 박아 넣는다 — 로봇이 자유롭게 우회할 공간이 넉넉하다.
+inline Map make_open_map() {
+    std::vector<std::string> rows(kMapSize, std::string(kMapSize, '.'));
+
+    // 6칸 간격으로 3x3 기둥을 박는다. 가장자리는 비워서 통행로를 보장한다.
+    for (int by = 6; by < kMapSize - 3; by += 8) {
+        for (int bx = 6; bx < kMapSize - 3; bx += 8) {
+            for (int y = by; y < by + 3; ++y) {
+                for (int x = bx; x < bx + 3; ++x) {
+                    rows[y][x] = '#';
+                }
+            }
+        }
+    }
+
+    return Map(rows);
+}
+
+// 맵 2: 좁은 통로(교차로형). 창고 선반 사이 복도를 흉내낸다 — 3칸짜리
+// "선반"(벽) 블록을 두고, 그 사이를 폭 1칸 복도로만 연결한다. 로봇이
+// 마주치면 한쪽이 비켜줄 공간이 거의 없는 구조다.
+inline Map make_corridor_map() {
+    std::vector<std::string> rows(kMapSize, std::string(kMapSize, '.'));
+
+    // 4칸 주기로 폭 3칸짜리 선반(벽)을 깔되, 선반과 선반 사이 1칸은
+    // 항상 비워서 복도로 남긴다. 가로 선반과 세로 선반을 번갈아 배치해
+    // 교차로 형태의 좁은 통로망을 만든다.
+    for (int by = 2; by < kMapSize - 3; by += 4) {
+        for (int bx = 2; bx < kMapSize - 3; bx += 4) {
+            for (int y = by; y < by + 3; ++y) {
+                for (int x = bx; x < bx + 3; ++x) {
+                    rows[y][x] = '#';
+                }
+            }
+        }
+    }
+
+    return Map(rows);
+}
+
+}  // namespace mapf::bench
