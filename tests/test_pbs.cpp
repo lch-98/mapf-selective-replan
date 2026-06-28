@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <stdexcept>
 #include "mapf/pbs.hpp"
 
 using namespace mapf;
@@ -101,6 +102,28 @@ TEST(PBSTest, FailsWhenAnyAgentIsUnreachable) {
     auto result = pbs.plan(agents);
 
     EXPECT_FALSE(result.has_value());
+}
+
+TEST(PBSTest, DuplicateAgentIdsThrow) {
+    Map map(3, 3);
+    PBS pbs(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 0}, Cell{2, 2}},
+        Agent{0, Cell{2, 0}, Cell{0, 2}},  // id 0이 중복
+    };
+
+    EXPECT_THROW(pbs.plan(agents), std::invalid_argument);
+}
+
+TEST(PBSTest, EmptyAgentsReturnsEmptySuccessfulResult) {
+    Map map(3, 3);
+    PBS pbs(map);
+
+    auto result = pbs.plan({});
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_TRUE(result->empty());
 }
 
 TEST(PBSTest, TailReservationProtectsArrivedAgentForever) {
