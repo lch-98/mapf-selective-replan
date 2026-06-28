@@ -47,11 +47,15 @@ struct SpaceTimeCell {
 // ReservationTable(03장)의 책임이다.
 class Map {
 public:
-    // 빈 맵(벽 없음) 생성.
+    // 빈 맵(벽 없음) 생성. width, height가 음수이면 std::invalid_argument를
+    // 던진다 — int를 size_t로 암묵 변환해 std::vector에 넘기면 거대한 양수로
+    // 둔갑해 std::length_error로 크래시하므로, 그 전에 명확한 예외로 막는다.
     Map(int width, int height);
 
     // ASCII 그림으로 맵 생성. '#' = 벽, 그 외 문자 = 빈 칸.
-    // rows[y][x]가 (x, y) 칸에 대응한다.
+    // rows[y][x]가 (x, y) 칸에 대응한다. rows의 행마다 길이가 다르면
+    // std::invalid_argument를 던진다 — 길이가 다르면 width_가 rows[0]
+    // 기준으로만 정해져서 더 짧은 행을 읽을 때 범위 밖 인덱싱(UB)이 된다.
     explicit Map(const std::vector<std::string>& rows);
 
     int width() const { return width_; }

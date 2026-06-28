@@ -4,6 +4,7 @@
 // 02_map_and_agent.md에서 설명한 Cell/Map/Agent의 동작을 확인한다.
 // ─────────────────────────────────────────────────────────────────
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include "mapf/map.hpp"
 #include "mapf/agent.hpp"
 
@@ -74,6 +75,20 @@ TEST(MapTest, SetObstacleBlocksThatCell) {
 
     map.set_obstacle(1, 1);
     EXPECT_FALSE(map.is_passable(1, 1));
+}
+
+TEST(MapTest, NegativeWidthOrHeightThrows) {
+    EXPECT_THROW(Map(-1, 3), std::invalid_argument);
+    EXPECT_THROW(Map(3, -1), std::invalid_argument);
+}
+
+TEST(MapTest, MismatchedRowLengthsThrows) {
+    EXPECT_THROW(Map({
+                      "...",
+                      "..",  // 길이가 다른 행
+                      "...",
+                  }),
+                  std::invalid_argument);
 }
 
 TEST(AgentTest, HoldsIdStartGoal) {

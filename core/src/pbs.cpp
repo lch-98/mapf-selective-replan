@@ -6,6 +6,8 @@
 #include "mapf/pbs.hpp"
 
 #include <algorithm>
+#include <stdexcept>
+#include <unordered_set>
 
 namespace mapf {
 
@@ -53,6 +55,13 @@ bool PBS::register_path(int agent_id, const Path& path) {
 }
 
 std::optional<PBSResult> PBS::plan(const std::vector<Agent>& agents) {
+    std::unordered_set<int> seen_ids;
+    for (const Agent& agent : agents) {
+        if (!seen_ids.insert(agent.id).second) {
+            throw std::invalid_argument("PBS::plan: agents must not contain duplicate ids");
+        }
+    }
+
     table_.clear();
 
     PBSResult result;
@@ -184,10 +193,10 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
     return result;
 }
 
-std::optional<PBSResult> PBS::full_replan_fallback(const std::vector<Agent>& agents,
-                                                     const PBSResult& previous_paths,
-                                                     const std::vector<Cell>& new_obstacles,
-                                                     int current_time) {
+std::optional<PBSResult> PBS::full_replan(const std::vector<Agent>& agents,
+                                           const PBSResult& previous_paths,
+                                           const std::vector<Cell>& new_obstacles,
+                                           int current_time) {
     table_.clear();
     reserve_new_obstacles(new_obstacles, current_time);
 
@@ -293,7 +302,7 @@ std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
 
     // 3단계: 안전망 — 전체 재계획(현재 위치 기준).
     std::optional<PBSResult> fallback =
-        full_replan_fallback(agents, previous_paths, new_obstacles, current_time);
+        full_replan(agents, previous_paths, new_obstacles, current_time);
     if (!fallback.has_value()) return std::nullopt;
 
     ReplanResult result;

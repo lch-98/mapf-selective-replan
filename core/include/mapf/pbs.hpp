@@ -45,6 +45,11 @@ public:
 
     // agents를 순서대로(=우선순위 순으로) 전부 계획한다.
     // 한 로봇이라도 경로를 못 찾으면 전체가 실패(nullopt)한다.
+    // agents에 중복된 id가 있으면 std::invalid_argument를 던진다 — 같은 id로
+    // 등록되면 서로의 점유를 "내 것"으로 오인해 충돌을 못 잡고, result에서도
+    // 한쪽 경로가 덮어써져 사라지는 잘못된 결과가 조용히 나온다.
+    // agents가 빈 벡터이면 계획할 로봇이 없으므로 빈 PBSResult를 성공으로
+    // 반환한다(실패가 아니다).
     std::optional<PBSResult> plan(const std::vector<Agent>& agents);
 
     // 이미 진행 중인 계획(previous_paths)에 new_obstacles가 새로 생겼을 때,
@@ -58,6 +63,19 @@ public:
                                         const PBSResult& previous_paths,
                                         const std::vector<Cell>& new_obstacles,
                                         int current_time);
+
+    // "현재 위치 기준 전체 재계획" — replan()이 안전망으로 쓰는 것과 동일한
+    // 로직(06장 6.7절)을 그대로 외부에 노출한다. working_ids 구분 없이
+    // agents 전체를, previous_paths에서 current_time 시점에 있던 칸을 새
+    // 출발점으로 삼아 처음부터 다시 계획한다(이미 지나온 길은 보존).
+    //
+    // 벤치마크에서 "전체 재계획 베이스라인"을 만들 때 쓴다 — replan()의
+    // 선택적 재계획과 공정하게 비교하려면, 베이스라인도 "맨 처음 출발점"이
+    // 아니라 "지금 로봇이 있는 위치"부터 다시 계획해야 하기 때문이다.
+    std::optional<PBSResult> full_replan(const std::vector<Agent>& agents,
+                                          const PBSResult& previous_paths,
+                                          const std::vector<Cell>& new_obstacles,
+                                          int current_time);
 
 private:
     // 경로를 테이블에 등록한다: 모든 (칸,시각)과 모든 이동을 등록하고,
@@ -111,13 +129,6 @@ private:
                                              int current_time,
                                              std::vector<SpaceTimeCell>* out_blocked,
                                              std::optional<int>* out_blocked_owner);
-
-    // 안전망: working_ids 구분 없이 agents 전체를, "지금 각자 있는 위치"를
-    // 새 출발점으로 삼아 처음부터 다시 계획한다(06장 6.7절).
-    std::optional<PBSResult> full_replan_fallback(const std::vector<Agent>& agents,
-                                                   const PBSResult& previous_paths,
-                                                   const std::vector<Cell>& new_obstacles,
-                                                   int current_time);
 
     const Map& map_;
     AStarConfig config_;

@@ -5,17 +5,28 @@
 // ─────────────────────────────────────────────────────────────────
 #include "mapf/map.hpp"
 
+#include <stdexcept>
+
 namespace mapf {
 
 Map::Map(int width, int height)
     : width_(width),
       height_(height),
-      blocked_(height, std::vector<bool>(width, false)) {}
+      blocked_(height < 0 ? 0 : height, std::vector<bool>(width < 0 ? 0 : width, false)) {
+    if (width < 0 || height < 0) {
+        throw std::invalid_argument("Map: width and height must be non-negative");
+    }
+}
 
 Map::Map(const std::vector<std::string>& rows)
     : width_(rows.empty() ? 0 : static_cast<int>(rows[0].size())),
       height_(static_cast<int>(rows.size())),
       blocked_(height_, std::vector<bool>(width_, false)) {
+    for (const std::string& row : rows) {
+        if (static_cast<int>(row.size()) != width_) {
+            throw std::invalid_argument("Map: all rows must have the same length");
+        }
+    }
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             blocked_[y][x] = (rows[y][x] == '#');
