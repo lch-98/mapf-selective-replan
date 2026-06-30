@@ -13,24 +13,33 @@
 // 한 시나리오의 흐름:
 //   1. plan()으로 초기 경로를 계획한다.
 //   2. 장애물 1~3개를 무작위로 고르되, 그중 적어도 하나는 실제로 어느
-//      로봇의 경로와 어느 시각에 겹치도록 만든다 — 그 충돌 시각을
-//      current_time으로 잡는다. (장애물이 아무도 안 지나가는 시공간에
-//      생기면 "사실상 장애물이 없는 것"과 같은 의미 없는 시나리오가 되므로,
-//      반드시 실제로 누군가의 길을 막는 시점을 골라야 재계획 비교가 의미를
-//      가진다.)
-//   3. 방법 A(전체 재계획): full_replan()을 호출 — "지금 위치 기준"으로
+//      로봇의 경로와 어느 시각에 겹치도록 만든다 — 그 충돌 시각의 한 스텝
+//      전을 current_time으로 잡는다.
+//   3. PBS::path_hits_obstacle(replan()이 내부에서 쓰는 바로 그 판별
+//      함수)로, 이 장애물이 실제로 적어도 한 로봇의 기존 경로를 막는지
+//      직접 검증한다. 안 막으면 이 시나리오는 버리고 처음부터 다시 뽑는다
+//      — "기존 경로 그대로 가면 실제로 실패하는" 시나리오만 표본으로
+//      삼아야 한다. 장애물이 아무도 안 막으면 "재계획이 필요 없는" 경우라
+//      방법 A/B 둘 다 의미 없이 가볍게 성공해버려서 비교가 무의미해진다.
+//   4. 방법 A(전체 재계획): full_replan()을 호출 — "지금 위치 기준"으로
 //      agents 전체를 처음부터 다시 계획한다(영향 안 받은 로봇도 다시 탐색).
-//   4. 방법 B(선택적 재계획): replan()을 호출 — 영향받은 로봇만 Tier 0/1/
+//   5. 방법 B(선택적 재계획): replan()을 호출 — 영향받은 로봇만 Tier 0/1/
 //      안전망 순서로 재계획한다.
-//   5. 각 방법의 성공 여부와 걸린 시간(ms)을 기록한다.
+//   6. 각 방법의 성공 여부와 걸린 시간(ms)을 기록한다.
 //
-// 방법 A와 방법 B는 같은 초기 경로, 같은 장애물, 같은 current_time을
-// 공유한다(공정한 비교를 위해 같은 시나리오에 두 방법을 모두 적용한다).
+// 방법 A와 방법 B는 같은 초기 경로, 같은(실제로 막히는 것이 검증된) 장애물,
+// 같은 current_time을 공유한다(공정한 비교를 위해 같은 시나리오에 두 방법을
+// 모두 적용한다) — full_replan()이 실패했을 때만 replan()을 시도하는 식의
+// 조건부 실행이 아니라, 항상 둘 다 독립적으로 실행해서 같은 상황에서의
+// 성공률·속도를 직접 비교한다.
 // ─────────────────────────────────────────────────────────────────
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <random>
+#include <sstream>
+#include <thread>
 #include <vector>
 
 #include "benchmark_maps.hpp"
@@ -89,12 +98,28 @@ std::vector<Agent> make_random_agents(const std::vector<Cell>& free_cells, int n
 //     재계획이든 선택적 재계획이든) 갈 곳이 없다 — "재계획으로 우회
 //     가능한 충돌"이 아니라 "목적지 자체가 봉쇄된, 누구도 못 푸는 상황"
 //     이므로 의미 있는 벤치마크 시나리오가 아니다.
-std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial) {
+//
+// 주의: 어느 로봇 A의 경로에서는 "지나가는 중간 칸"이라도, 다른 로봇 B의
+// *목적지*와 같은 칸일 수 있다(서로 다른 로봇이니까). 그 칸을 장애물로
+// 고르면 B는 영원히 도착 못 하는 상황이 되어 똑같은 문제가 생긴다. 그래서
+// any_goal_cells(모든 로봇의 목적지 집합)도 함께 받아서, 그 어떤 로봇의
+// 목적지와도 겹치지 않는 칸만 후보로 남긴다.
+std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
+                                               const std::vector<Cell>& all_goals) {
     std::vector<SpaceTimeCell> cells;
     for (const auto& [id, path] : initial) {
         for (size_t i = 0; i < path.size(); ++i) {
             if (i == 0) continue;                  // start
-            if (i == path.size() - 1) continue;    // goal
+            if (i == path.size() - 1) continue;    // 이 로봇 자신의 goal
+            Cell here{path[i].x, path[i].y};
+            bool is_anyones_goal = false;
+            for (const Cell& goal : all_goals) {
+                if (goal == here) {
+                    is_anyones_goal = true;
+                    break;
+                }
+            }
+            if (is_anyones_goal) continue;  // 다른 로봇의 목적지와 우연히 겹침 — 후보 제외
             cells.push_back(path[i]);
         }
     }
@@ -115,14 +140,24 @@ std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial) {
 // 직접 재현해서 확인한 사실이다). 우리가 원하는 의미는 "장애물이 생긴 그
 // 순간, 로봇은 아직 그 칸에 도착하기 전이고 원래는 다음 스텝에 그 칸으로
 // 들어갈 예정이었다"이므로, current_time은 chosen.t-1이어야 한다.
+//
+// 추가 장애물(0~2개)도 어느 로봇의 목적지와도 안 겹치는 칸으로만 고른다 —
+// 그 이유는 collect_path_cells의 주석과 같다. 이걸 빠뜨리면, A*가 도달
+// 불가능한 목적지를 향해 max_timestep까지 모든 경로를 다 헤매다 실패하는
+// 데 수 초가 걸리는 사례가 실제로 재현됐다(직접 디버깅으로 확인).
 std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& free_cells,
+                                                       const std::vector<Agent>& agents,
                                                        const PBSResult& initial,
                                                        std::mt19937& rng, int* out_current_time) {
-    std::vector<SpaceTimeCell> path_cells = collect_path_cells(initial);
-    // path_cells가 비는 경우(모든 로봇이 1~2스텝짜리 짧은 경로일 때 흔함)는
-    // 충돌시킬 시공간이 없으므로, 장애물을 빈 칸 중 무작위로 두고
-    // current_time=0으로 둔다 — 이 경우 1단계(영향받는 로봇 판별)에서
-    // 아무도 영향을 안 받는 것으로 정확히 처리된다(의미상 모순이 아니다).
+    std::vector<Cell> all_goals;
+    for (const Agent& agent : agents) all_goals.push_back(agent.goal);
+
+    std::vector<SpaceTimeCell> path_cells = collect_path_cells(initial, all_goals);
+    // path_cells가 비는 경우(모든 로봇이 1~2스텝짜리 짧은 경로일 때 흔함, 또는
+    // 중간 칸이 전부 누군가의 목적지와 겹치는 경우)는 충돌시킬 시공간이
+    // 없으므로, 장애물을 빈 칸 중 무작위로 두고 current_time=0으로 둔다 —
+    // 이 경우 1단계(영향받는 로봇 판별)에서 아무도 영향을 안 받는 것으로
+    // 정확히 처리된다(의미상 모순이 아니다).
     Cell blocking_cell = free_cells.front();
     int current_time = 0;
     if (!path_cells.empty()) {
@@ -135,10 +170,18 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
 
     std::vector<Cell> obstacles = {blocking_cell};
 
-    // 나머지 0~2개는 그냥 무작위 빈 칸(중복/시작칸 제외)으로 채운다.
+    // 나머지 0~2개는 그냥 무작위 빈 칸(중복/시작칸/누구의 목적지도 아닌 칸)으로 채운다.
     std::vector<Cell> candidates;
     for (const Cell& cell : free_cells) {
         if (cell == blocking_cell) continue;
+        bool is_anyones_goal = false;
+        for (const Cell& goal : all_goals) {
+            if (goal == cell) {
+                is_anyones_goal = true;
+                break;
+            }
+        }
+        if (is_anyones_goal) continue;
         candidates.push_back(cell);
     }
     std::shuffle(candidates.begin(), candidates.end(), rng);
@@ -156,18 +199,61 @@ double elapsed_ms(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
-// 전방 선언 — find_solvable_scenario_and_run이 아래쪽에 정의된
-// run_one_scenario를 먼저 호출하기 때문에 필요하다.
-ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents,
-                                 const PBSResult& initial, std::mt19937& rng);
+// initial의 agents 중 적어도 한 명이, current_time 이후 시점에 obstacles와
+// 실제로 겹치는지 확인한다. PBS::path_hits_obstacle을 그대로 쓴다 —
+// replan()이 "영향받는 로봇"을 판별할 때 쓰는 바로 그 함수이므로, 여기서
+// "막혔다"고 판정되면 라이브러리 내부에서도 똑같이 "막혔다"고 판정된다는
+// 보장이 생긴다(직접 복제한 로직이 아니라서 기준이 어긋날 일이 없다).
+bool obstacles_actually_block_someone(const std::vector<Agent>& agents, const PBSResult& initial,
+                                       const std::vector<Cell>& obstacles, int current_time) {
+    for (const Agent& agent : agents) {
+        if (PBS::path_hits_obstacle(initial.at(agent.id), obstacles, current_time)) return true;
+    }
+    return false;
+}
 
-// plan()에 성공하는 시나리오를 찾을 때까지 무작위로 agents를 다시 뽑는다.
-// (A안) "장애물이 생기기도 전에 초기 계획 자체가 실패하는" 시나리오는
-// 재계획 비교(방법 A vs B)와는 별개의 문제이므로 표본에서 제외한다 — 그래야
-// 모든 trial이 "일단 다들 갈 길이 있던 정상적인 상황"에서 출발해, 방법 A와
-// 방법 B를 공정하게 비교할 수 있다. 대신 몇 번 재시도해야 했는지
-// (plan_attempts)를 따로 기록해서, "로봇 수가 늘수록 초기 설계 자체가
-// 어려워진다"는 사실 자체를 잃어버리지 않고 CSV에 명시한다.
+// 한 무작위 시나리오를 만들고, 방법 A/B를 모두 돌려서 결과를 기록한다.
+// 호출하는 쪽이 이미 "plan()에 성공하고, 장애물이 실제로 누군가를 막는"
+// 시나리오를 확인한 뒤 agents/initial/obstacles/current_time을 넘겨주므로,
+// 여기서는 plan_ok=true가 항상 보장된다.
+ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents,
+                                 const PBSResult& initial, const std::vector<Cell>& obstacles,
+                                 int current_time) {
+    ScenarioResult result;
+    result.plan_ok = true;
+
+    // 방법 A: 전체 재계획 (현재 위치 기준).
+    {
+        PBS pbs_a(map);
+        auto t0 = std::chrono::steady_clock::now();
+        std::optional<PBSResult> full = pbs_a.full_replan(agents, initial, obstacles, current_time);
+        result.full_replan_ms = elapsed_ms(t0);
+        result.full_replan_ok = full.has_value();
+    }
+
+    // 방법 B: 선택적 재계획(Tier 0/1/안전망).
+    {
+        PBS pbs_b(map);
+        auto t0 = std::chrono::steady_clock::now();
+        std::optional<ReplanResult> selective = pbs_b.replan(agents, initial, obstacles, current_time);
+        result.selective_replan_ms = elapsed_ms(t0);
+        result.selective_replan_ok = selective.has_value();
+        if (selective.has_value()) result.escalation_tier = selective->escalation_tier;
+    }
+
+    return result;
+}
+
+// plan()에 성공하고, 또한 무작위로 고른 장애물이 실제로 그 plan을 깨뜨리는
+// (=적어도 한 로봇의 기존 경로와 실제로 겹치는) 시나리오를 찾을 때까지
+// 재시도한다. 둘 중 하나라도 안 되면 표본에서 제외하고 다시 뽑는다 —
+//
+//   - plan() 자체가 실패: 재계획 비교와는 별개의 문제(A안, 기존 설명대로).
+//   - plan()은 성공했지만 장애물이 아무도 안 막음: 이 경우 "재계획이 필요
+//     없는" 시나리오인데, 그런 시나리오에 full_replan()/replan()을 돌려보면
+//     둘 다 그냥 가볍게 성공해버려서 "재계획 방법 비교"가 아니라 "장애물
+//     없는 경우의 우연한 성공"을 측정하는 의미 없는 데이터가 된다. 그래서
+//     "기존 경로 그대로 가면 실제로 막히는 시나리오"만 표본으로 삼는다.
 //
 // max_attempts번 안에 못 찾으면(극히 드문 경우) 마지막 실패를 그대로
 // plan_ok=false로 기록하고 멈춘다 — 무한 루프를 막기 위한 안전장치다.
@@ -191,7 +277,25 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
             continue;  // 이번 무작위 배치는 초기 계획부터 실패 — 다시 뽑는다.
         }
 
-        ScenarioResult result = run_one_scenario(map, agents, *initial, rng);
+        int current_time = 0;
+        std::vector<Cell> obstacles =
+            make_obstacles_that_actually_block(free_cells, agents, *initial, rng, &current_time);
+
+        // 장애물이 실제로 누군가의 기존 경로를 막는지 직접 검증한다 —
+        // make_obstacles_that_actually_block이 "경로 중간 칸"에서 골랐다는
+        // 사실에만 의존하지 않고, replan()이 실제로 쓰는 판별 함수로 다시
+        // 한 번 확인해서 검증 단계를 빠뜨리지 않는다.
+        if (!obstacles_actually_block_someone(agents, *initial, obstacles, current_time)) {
+            if (attempt == kMaxAttempts) {
+                ScenarioResult failed;
+                failed.plan_ok = false;
+                failed.plan_attempts = attempt;
+                return failed;
+            }
+            continue;  // 이번 장애물은 아무도 안 막음 — 처음부터 다시 뽑는다.
+        }
+
+        ScenarioResult result = run_one_scenario(map, agents, *initial, obstacles, current_time);
         result.plan_attempts = attempt;
         return result;
     }
@@ -202,40 +306,32 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
     return failed;
 }
 
-// 한 무작위 시나리오를 만들고, 방법 A/B를 모두 돌려서 결과를 기록한다.
-// 호출하는 쪽(find_solvable_scenario_and_run)이 이미 "plan()에 성공하는
-// 시나리오"를 찾아서 agents/initial을 넘겨주므로, 여기서는 plan_ok=true가
-// 항상 보장된다.
-ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents,
-                                 const PBSResult& initial, std::mt19937& rng) {
-    ScenarioResult result;
-    result.plan_ok = true;
+// 한 trial(맵 x 로봇수 x 반복 번호)을 가리키는 작업 단위. map은 포인터로
+// 들고 있다 — Map은 main()의 maps 벡터 안에서 트라이얼 실행 내내 살아있고,
+// 복사하면 32x32 격자를 매번 복사하는 낭비가 생기기 때문이다.
+struct Task {
+    const Map* map;
+    const char* map_name;
+    int num_agents;
+    int trial;
+    uint32_t seed;  // 이 task 전용 시드 — 스레드 간에 절대 공유하지 않는다.
+};
 
-    std::vector<Cell> free_cells = collect_free_cells(map);
-    int current_time = 0;
-    std::vector<Cell> obstacles =
-        make_obstacles_that_actually_block(free_cells, initial, rng, &current_time);
+// 작업 하나를 처리해서 CSV 한 줄(개행 포함)을 문자열로 만들어 돌려준다.
+// std::cout에 직접 쓰지 않는 이유: 여러 스레드가 동시에 출력하면 줄이
+// 서로 섞이기 때문이다(예: 두 줄의 글자가 한 줄에 뒤섞여 찍힘) — 대신
+// 각자 자기 결과를 문자열로 모아두고, main()이 task 순서대로(스레드가
+// 어떤 순서로 끝났든 상관없이) 한 번에 출력한다.
+std::string run_task(const Task& task) {
+    std::mt19937 rng(task.seed);  // 이 task만의 독립 RNG — 다른 스레드와 공유 없음.
+    ScenarioResult r = find_solvable_scenario_and_run(*task.map, task.num_agents, rng);
 
-    // 방법 A: 전체 재계획 (현재 위치 기준).
-    {
-        PBS pbs_a(map);
-        auto t0 = std::chrono::steady_clock::now();
-        std::optional<PBSResult> full = pbs_a.full_replan(agents, initial, obstacles, current_time);
-        result.full_replan_ms = elapsed_ms(t0);
-        result.full_replan_ok = full.has_value();
-    }
-
-    // 방법 B: 선택적 재계획(Tier 0/1/안전망).
-    {
-        PBS pbs_b(map);
-        auto t0 = std::chrono::steady_clock::now();
-        std::optional<ReplanResult> selective = pbs_b.replan(agents, initial, obstacles, current_time);
-        result.selective_replan_ms = elapsed_ms(t0);
-        result.selective_replan_ok = selective.has_value();
-        if (selective.has_value()) result.escalation_tier = selective->escalation_tier;
-    }
-
-    return result;
+    std::ostringstream out;
+    out << task.map_name << "," << task.num_agents << "," << task.trial << ","
+        << r.plan_attempts << "," << (r.plan_ok ? 1 : 0) << "," << (r.full_replan_ok ? 1 : 0)
+        << "," << r.full_replan_ms << "," << (r.selective_replan_ok ? 1 : 0) << ","
+        << r.selective_replan_ms << "," << r.escalation_tier << "\n";
+    return out.str();
 }
 
 }  // namespace
@@ -261,24 +357,50 @@ int main() {
     std::cerr << "[note] every row's initial plan() already succeeded — scenarios where the "
                  "initial plan failed were retried (see plan_attempts column).\n";
 
-    std::cout << "map,num_agents,trial,plan_attempts,plan_ok,full_replan_ok,full_replan_ms,"
-                 "selective_replan_ok,selective_replan_ms,escalation_tier\n";
-
-    std::mt19937 rng(12345);  // 고정 시드 — 실행마다 같은 시나리오 재현 가능.
-
+    // 작업 목록을 미리 전부 만든다. 각 task의 seed는 (map, num_agents, trial)
+    // 조합으로 결정되는 고유한 값이라서, 어떤 스레드가 몇 번째로 이 task를
+    // 처리하든 — 즉 실행 순서가 매번 달라지더라도 — 항상 같은 무작위
+    // 시나리오를 만든다. 그래서 멀티스레드로 돌려도 같은 시드로 실행하면
+    // 항상 같은 CSV가 나온다(재현성 보장).
+    constexpr uint32_t kBaseSeed = 12345;
+    std::vector<Task> tasks;
     for (const NamedMap& named_map : maps) {
         for (int num_agents : agent_counts) {
             for (int trial = 0; trial < kRepeats; ++trial) {
-                ScenarioResult r = find_solvable_scenario_and_run(named_map.map, num_agents, rng);
-
-                std::cout << named_map.name << "," << num_agents << "," << trial << ","
-                          << r.plan_attempts << "," << (r.plan_ok ? 1 : 0) << ","
-                          << (r.full_replan_ok ? 1 : 0) << "," << r.full_replan_ms << ","
-                          << (r.selective_replan_ok ? 1 : 0) << "," << r.selective_replan_ms << ","
-                          << r.escalation_tier << "\n";
+                uint32_t seed = kBaseSeed + static_cast<uint32_t>(tasks.size());
+                tasks.push_back(Task{&named_map.map, named_map.name, num_agents, trial, seed});
             }
         }
     }
+
+    // task 순서대로 결과 문자열을 채워 넣을 자리를 미리 마련해둔다 —
+    // 스레드가 끝나는 순서는 뒤죽박죽이어도, 출력만큼은 항상 task 순서
+    // (map -> num_agents -> trial)대로 나가게 하기 위해서다.
+    std::vector<std::string> results(tasks.size());
+    std::atomic<size_t> next_task_index{0};
+
+    unsigned int num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 4;  // hardware_concurrency가 알 수 없다고 보고하면 4로 폴백.
+    num_threads = std::min<unsigned int>(num_threads, static_cast<unsigned int>(tasks.size()));
+
+    std::cerr << "[note] running " << tasks.size() << " trials on " << num_threads
+              << " threads.\n";
+
+    auto worker = [&]() {
+        while (true) {
+            size_t i = next_task_index.fetch_add(1);
+            if (i >= tasks.size()) break;
+            results[i] = run_task(tasks[i]);
+        }
+    };
+
+    std::vector<std::thread> workers;
+    for (unsigned int t = 0; t < num_threads; ++t) workers.emplace_back(worker);
+    for (std::thread& t : workers) t.join();
+
+    std::cout << "map,num_agents,trial,plan_attempts,plan_ok,full_replan_ok,full_replan_ms,"
+                 "selective_replan_ok,selective_replan_ms,escalation_tier\n";
+    for (const std::string& line : results) std::cout << line;
 
     return 0;
 }
