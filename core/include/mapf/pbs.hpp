@@ -77,6 +77,19 @@ public:
                                           const std::vector<Cell>& new_obstacles,
                                           int current_time);
 
+    // agent_id의 경로(path)가 current_time 이후 시점에 new_obstacles 중
+    // 한 칸과 같은 (칸,시각)에서 겹치는지 확인한다(06장 6.4절 1단계) —
+    // replan()이 "영향받는 로봇"을 판별할 때 쓰는 것과 정확히 같은 기준이다.
+    //
+    // public으로 노출하는 이유: 벤치마크 등 외부 코드가 "이 장애물이 실제로
+    // 이 로봇의 기존 경로를 막는가"를 replan()/full_replan()을 호출하기
+    // *전에* 직접 확인할 수 있어야 하기 때문이다 — 그래야 "장애물이 실제로는
+    // 아무도 안 막는, 사실상 의미 없는 시나리오"를 비교 대상에서 걸러낼 수
+    // 있다. PBS 내부 판별 로직과 별도로 복제해서 만들면 나중에 한쪽만 바뀌어
+    // 기준이 어긋날 위험이 있으므로, 실제로 쓰는 그 함수를 그대로 공유한다.
+    static bool path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
+                                    int current_time);
+
 private:
     // 경로를 테이블에 등록한다: 모든 (칸,시각)과 모든 이동을 등록하고,
     // 마지막으로 목적지 칸을 도착 시각부터 max_timestep까지 추가로
@@ -93,11 +106,6 @@ private:
     // current_time 시점에 agent_id가 있던 칸. path가 current_time보다
     // 짧으면(=이미 도착해서 Tail 상태) 목적지 칸을 반환한다(06장 6.4절).
     static Cell position_at(const Path& path, int current_time);
-
-    // agent_id의 경로(path)가 current_time 이후 시점에 new_obstacles 중
-    // 한 칸과 같은 (칸,시각)에서 겹치는지 확인한다(06장 6.4절 1단계).
-    static bool path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
-                                    int current_time);
 
     // new_obstacles를 current_time부터 max_timestep까지 영원히 점유된 것으로
     // 테이블에 등록한다. owner를 지정하지 않아 -1("주인 모름")로 기록되므로,
