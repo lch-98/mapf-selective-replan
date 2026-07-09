@@ -99,17 +99,28 @@ std::vector<Agent> make_random_agents(const std::vector<Cell>& free_cells, int n
 //     가능한 충돌"이 아니라 "목적지 자체가 봉쇄된, 누구도 못 푸는 상황"
 //     이므로 의미 있는 벤치마크 시나리오가 아니다.
 //
-// 주의: 어느 로봇 A의 경로에서는 "지나가는 중간 칸"이라도, 다른 로봇 B의
+// 주의 1: 어느 로봇 A의 경로에서는 "지나가는 중간 칸"이라도, 다른 로봇 B의
 // *목적지*와 같은 칸일 수 있다(서로 다른 로봇이니까). 그 칸을 장애물로
 // 고르면 B는 영원히 도착 못 하는 상황이 되어 똑같은 문제가 생긴다. 그래서
-// any_goal_cells(모든 로봇의 목적지 집합)도 함께 받아서, 그 어떤 로봇의
+// all_goals(모든 로봇의 목적지 집합)도 함께 받아서, 그 어떤 로봇의
 // 목적지와도 겹치지 않는 칸만 후보로 남긴다.
+//
+// 주의 2: 같은 이유로, 로봇 A의 경로 중간 칸이 다른 로봇 B의 *시작점*과
+// 같을 수도 있다. 이때 chosen.t==1인 후보가 뽑히면 current_time(=chosen.t-1)이
+// 0이 되는데, path_hits_obstacle은 current_time을 포함해서 검사하므로
+// (core/src/pbs.cpp의 for (t = current_time; ...) 참고) t=0에 그 칸에 서
+// 있는 로봇 B가 "이미 장애물 안에 서 있는" 모순 상황에 놓인다. 이 경우
+// register_path가 시작 칸 등록에서 실패해 full_replan/replan 둘 다
+// 조용히 실패해버려서, "재계획으로 우회 가능한 충돌"이 아닌 데이터가 CSV에
+// 섞여 들어간다(직접 코드를 추적해서 확인한 사각지대). all_goals와 똑같은
+// 방식으로 all_starts(모든 로봇의 시작점 집합)도 걸러낸다.
 std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
-                                               const std::vector<Cell>& all_goals) {
+                                               const std::vector<Cell>& all_goals,
+                                               const std::vector<Cell>& all_starts) {
     std::vector<SpaceTimeCell> cells;
     for (const auto& [id, path] : initial) {
         for (size_t i = 0; i < path.size(); ++i) {
-            if (i == 0) continue;                  // start
+            if (i == 0) continue;                  // 이 로봇 자신의 start
             if (i == path.size() - 1) continue;    // 이 로봇 자신의 goal
             Cell here{path[i].x, path[i].y};
             bool is_anyones_goal = false;
@@ -120,6 +131,14 @@ std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
                 }
             }
             if (is_anyones_goal) continue;  // 다른 로봇의 목적지와 우연히 겹침 — 후보 제외
+            bool is_anyones_start = false;
+            for (const Cell& start : all_starts) {
+                if (start == here) {
+                    is_anyones_start = true;
+                    break;
+                }
+            }
+            if (is_anyones_start) continue;  // 다른 로봇의 시작점과 우연히 겹침 — 후보 제외
             cells.push_back(path[i]);
         }
     }
@@ -150,18 +169,52 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
                                                        const PBSResult& initial,
                                                        std::mt19937& rng, int* out_current_time) {
     std::vector<Cell> all_goals;
-    for (const Agent& agent : agents) all_goals.push_back(agent.goal);
+    std::vector<Cell> all_starts;
+    for (const Agent& agent : agents) {
+        all_goals.push_back(agent.goal);   // 모든 에이전트의 목적지
+        all_starts.push_back(agent.start); // 모든 에이전트의 시작점
+    }
 
-    std::vector<SpaceTimeCell> path_cells = collect_path_cells(initial, all_goals);
+    std::vector<SpaceTimeCell> path_cells = collect_path_cells(initial, all_goals, all_starts);
     // path_cells가 비는 경우(모든 로봇이 1~2스텝짜리 짧은 경로일 때 흔함, 또는
     // 중간 칸이 전부 누군가의 목적지와 겹치는 경우)는 충돌시킬 시공간이
-    // 없으므로, 장애물을 빈 칸 중 무작위로 두고 current_time=0으로 둔다 —
-    // 이 경우 1단계(영향받는 로봇 판별)에서 아무도 영향을 안 받는 것으로
-    // 정확히 처리된다(의미상 모순이 아니다).
+    // 없으므로, 장애물을 빈 칸 중 무작위로 두고 current_time=0으로 둔다.
+    //
+    // 이때 fallback 칸은 누군가의 start와도, 누군가의 goal과도 겹치면 안 된다
+    // — current_time=0이면 path_hits_obstacle이 t=0부터 검사하는데
+    // (core/src/pbs.cpp), 겹치는 대상에 따라 서로 다른 이유로 문제가 생긴다:
+    //   - start와 겹치면: t=0의 위치가 곧 그 로봇의 start이므로 그 로봇이
+    //     "이미 장애물 안에 서 있는" 모순에 빠져 register_path가 실패한다.
+    //   - goal과 겹치면: path_hits_obstacle의 check_until이 그 로봇의 도착
+    //     시각(last_t)까지 검사하므로 t=last_t에 걸려 "막힌 로봇"으로 잡히고,
+    //     reserve_new_obstacles가 current_time부터 영원히 그 칸을 점유시키므로
+    //     그 로봇은 목적지 자체가 봉쇄되어 어떤 방법으로도 도착할 수 없다
+    //     (collect_path_cells가 goal을 제외하는 것과 같은 이유).
+    // (둘 다 직접 코드를 추적해서 확인한 사각지대.) all_starts에도 all_goals에도
+    // 속하지 않는 첫 칸을 쓴다 — agents를 만들 때 start끼리도 goal끼리도 서로
+    // 겹치지 않게 뽑았을 뿐 start 전체와 goal 전체가 free_cells를 다 채우는
+    // 것은 아니므로(개수가 num_agents*2 <= free_cells인 한), 그런 칸이 항상
+    // 존재한다.
     Cell blocking_cell = free_cells.front();
+    // free_cell들 중 하나인 cell이 어떠한 start 점도 아니고, goal 점도 아니라면 초기 blocking_cell로 초기화
+    for (const Cell& cell : free_cells) {
+        bool is_taken = false; 
+        for (const Cell& start : all_starts) {
+            if (start == cell) { is_taken = true; break; }
+        }
+        if (!is_taken) {
+            for (const Cell& goal : all_goals) {
+                if (goal == cell) { is_taken = true; break; }
+            }
+        }
+        if (!is_taken) {
+            blocking_cell = cell;
+            break;
+        }
+    }
     int current_time = 0;
     if (!path_cells.empty()) {
-        std::uniform_int_distribution<size_t> idx_dist(0, path_cells.size() - 1);
+        std::uniform_int_distribution<size_t> idx_dist(0, path_cells.size() - 1); // 실제 겹치는 점 중 하나를 균등한 확률로 뽑음.
         const SpaceTimeCell& chosen = path_cells[idx_dist(rng)];
         blocking_cell = Cell{chosen.x, chosen.y};
         current_time = chosen.t - 1;
@@ -170,7 +223,10 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
 
     std::vector<Cell> obstacles = {blocking_cell};
 
-    // 나머지 0~2개는 그냥 무작위 빈 칸(중복/시작칸/누구의 목적지도 아닌 칸)으로 채운다.
+    // 나머지 0~2개는 그냥 무작위 빈 칸(중복/누구의 목적지도 아닌 칸)으로 채운다.
+    // current_time이 0인 경우(위 fallback 분기) t=0이 검사 범위에 들어가므로,
+    // 여기서도 all_starts와 겹치는 칸은 똑같은 이유로 제외해야 한다 — 그렇지
+    // 않으면 주 장애물만 고쳐도 추가 장애물이 같은 사각지대를 재현한다.
     std::vector<Cell> candidates;
     for (const Cell& cell : free_cells) {
         if (cell == blocking_cell) continue;
@@ -182,11 +238,19 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
             }
         }
         if (is_anyones_goal) continue;
+        bool is_anyones_start = false;
+        for (const Cell& start : all_starts) {
+            if (start == cell) {
+                is_anyones_start = true;
+                break;
+            }
+        }
+        if (is_anyones_start) continue;
         candidates.push_back(cell);
     }
     std::shuffle(candidates.begin(), candidates.end(), rng);
 
-    std::uniform_int_distribution<int> extra_count_dist(0, 2);
+    std::uniform_int_distribution<int> extra_count_dist(0, 2); // 0, 1, 2 중 하나를 균등한 확률로 뽑음
     int extra_count = extra_count_dist(rng);
     for (int i = 0; i < extra_count && i < static_cast<int>(candidates.size()); ++i) {
         obstacles.push_back(candidates[static_cast<size_t>(i)]);
@@ -203,7 +267,7 @@ double elapsed_ms(std::chrono::steady_clock::time_point start) {
 // 실제로 겹치는지 확인한다. PBS::path_hits_obstacle을 그대로 쓴다 —
 // replan()이 "영향받는 로봇"을 판별할 때 쓰는 바로 그 함수이므로, 여기서
 // "막혔다"고 판정되면 라이브러리 내부에서도 똑같이 "막혔다"고 판정된다는
-// 보장이 생긴다(직접 복제한 로직이 아니라서 기준이 어긋날 일이 없다).
+// 보장이 생긴다(직접 복제한 로직이 아니라서 기준이 어긋날 일이 없다.)
 bool obstacles_actually_block_someone(const std::vector<Agent>& agents, const PBSResult& initial,
                                        const std::vector<Cell>& obstacles, int current_time) {
     for (const Agent& agent : agents) {
@@ -260,10 +324,10 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, std::mt19937& rng) {
     constexpr int kMaxAttempts = 200;
 
-    std::vector<Cell> free_cells = collect_free_cells(map);
+    std::vector<Cell> free_cells = collect_free_cells(map); // 벽이 아닌 모든 Cell들을 수집
 
     for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
-        std::vector<Agent> agents = make_random_agents(free_cells, num_agents, rng);
+        std::vector<Agent> agents = make_random_agents(free_cells, num_agents, rng); // 벽이 아닌 모든 Cell 들에서 시작점과 도착점을 랜덤으로 에이전트에 할당
 
         PBS pbs(map);
         std::optional<PBSResult> initial = pbs.plan(agents);
@@ -278,6 +342,7 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
         }
 
         int current_time = 0;
+        // 장애물을 1~3개를 추출
         std::vector<Cell> obstacles =
             make_obstacles_that_actually_block(free_cells, agents, *initial, rng, &current_time);
 
@@ -379,9 +444,10 @@ int main() {
     std::vector<std::string> results(tasks.size());
     std::atomic<size_t> next_task_index{0};
 
-    unsigned int num_threads = std::thread::hardware_concurrency();
+    // thread 설정
+    unsigned int num_threads = std::thread::hardware_concurrency(); // PC가 쓸 수 있느 thread 갯수를 return
     if (num_threads == 0) num_threads = 4;  // hardware_concurrency가 알 수 없다고 보고하면 4로 폴백.
-    num_threads = std::min<unsigned int>(num_threads, static_cast<unsigned int>(tasks.size()));
+    num_threads = std::min<unsigned int>(num_threads, static_cast<unsigned int>(tasks.size())); // thread 자원낭비를 방지 (ex. task가 8개인데 thread가 16개 일 때, thread를 8개만 사용)
 
     std::cerr << "[note] running " << tasks.size() << " trials on " << num_threads
               << " threads.\n";
