@@ -112,7 +112,7 @@ bool PBS::path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obst
 }
 
 void PBS::reserve_new_obstacles(const std::vector<Cell>& new_obstacles, int current_time) {
-    // new_obstacles는 current_time 이후로 영원히 막혀 있다고 가정한다 —
+    // new_obstacles는 current_time 이후로 영원히 막혀 있다고 가정한다
     // 06장은 "장애물이 생겼다"고만 말하고 언제 사라지는지는 다루지 않으므로,
     // max_timestep까지 계속 점유된 것으로 등록한다. agent_id를 생략해
     // owner=-1("주인 모름")로 기록한다 — 이건 로봇이 아니라 정적 장애물이므로
@@ -141,8 +141,8 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
                            working_ids.end();
 
         if (!is_working) {
-            // working_ids에 없는 로봇: 기존 경로를 그대로 믿고 장벽으로
-            // 등록한다(06장 6.4절 2단계).
+            // working_ids에 없는 로봇: 기존 경로를 그대로 믿고 장벽으로 등록한다.(06장 6.4절 2단계)
+            // 이 등록은 옛경로 그대로를 재등록한다는 의미이다.
             //
             // 이 등록이 거절될 수도 있다 — 이미 재탐색된 working_ids 로봇의
             // 새 경로(Tail 포함)가, 이 "안 건드린" 로봇의 옛 Tail
@@ -161,10 +161,13 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
             continue;
         }
 
-        // working_ids에 속한 로봇(영향받은 로봇 + 구조 로봇): 아직 자기
-        // 차례가 오기 전까지는 옛 경로를 장벽으로 쓰지 않는다 — 06장
-        // 6.6.1절 "구조 로봇의 과거 경로를 장벽으로 쓰면 안 된다"가 바로
-        // 이 부분이다. 새로 재탐색해서 그 결과만 장벽이 되게 한다.
+        // working_ids에 속한 로봇: 원래 영향받은 로봇이든, 에스컬레이션으로
+        // 추가된 구조 로봇이든 구분하지 않고 전부 똑같이 처리한다.
+        // 옛경로를 장벽으로 등록하지 않고, current_time 시점 위치에서 목적지까지
+        // 새로 A* 재탐색한다(06장 6.6.1절). 구조 로봇도 이렇게 자유롭게 다시
+        // 계산되어야만, 자기 옛 자리를 고집하지 않고 실제로 길을 비켜줄 수
+        // 있다 — 옛 경로(특히 Tail Reservation)를 그대로 장벽으로 세워두면
+        // "구조"라는 이름이 무색하게 아무 자리도 안 비켜주는 셈이 된다.
         const Path& old_path = previous_paths.at(agent.id);
         Cell here = position_at(old_path, current_time);
 
@@ -251,8 +254,8 @@ std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
     // working_ids를 넓혀가며 재시도한다(06장 6.6절).
     std::vector<int> rescued_ids;
     for (int tier = 0; tier <= replan_config_.max_escalation_tiers; ++tier) {
-        std::vector<SpaceTimeCell> blocked; // try_replan_set() -> out_blocked
-        std::optional<int> blocked_owner;   // try_replan_set() -> out_blocked_owner
+        std::vector<SpaceTimeCell> blocked; // try_replan_set() -> out_blocked (working_ids에 포함된 로봇 경로계획 실패시)
+        std::optional<int> blocked_owner;   // try_replan_set() -> out_blocked_owner (working_ids에 포함되지 않은 로봇 경로계획 실패시)
         std::optional<PBSResult> attempt = try_replan_set(
             agents, previous_paths, working_ids, new_obstacles, current_time, &blocked,
             &blocked_owner);
@@ -270,8 +273,8 @@ std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
 
         bool added_any = false;
 
-        // barrier 등록 자체가 거절된 경우: 거절당한 로봇 자신을 추가한다
-        // (06장 6.6절 확장 — A*가 못 찾은 게 아니라 Tail 등록이 막힌 경우).
+        // barrier 등록 자체가 거절된 경우: 거절당한 로봇 자신을 추가한다. (06장 6.6절 확장 — A*가 못 찾은 게 아니라 Tail 등록이 막힌 경우)
+        // (working_ids에 포함되지 않은 로봇 경로계획 실패시)
         if (blocked_owner.has_value()) {
             bool already_working = std::find(working_ids.begin(), working_ids.end(),
                                               *blocked_owner) != working_ids.end();
@@ -282,8 +285,8 @@ std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
             }
         }
 
-        // A* 탐색 자체가 막힌 경우: 막힌 칸들의 주인을 추적해서 새
-        // "구조 로봇"을 working_ids에 추가한다(06장 6.6절 기본 메커니즘).
+        // A* 탐색 자체가 막힌 경우: 막힌 칸들의 주인을 추적해서 새"구조 로봇"을 working_ids에 추가한다(06장 6.6절 기본 메커니즘).
+        // (working_ids에 포함된 로봇 경로계획 실패시)
         for (const SpaceTimeCell& cell : blocked) {
             std::optional<int> owner = table_.get_owner(cell.x, cell.y, cell.t);
             if (!owner.has_value() || *owner == -1) continue;
