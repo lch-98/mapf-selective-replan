@@ -2,13 +2,15 @@
 // tools/benchmark.cpp
 //
 // 논문용 데이터 수집 도구. 맵 2종(넓은 통로/좁은 통로) x 로봇 수
-// (5/10/20) x 방법(전체 재계획 vs 선택적 재계획)을 50회씩 무작위
+// (5/10/20/40) x 방법(전체 재계획 vs 선택적 재계획)을 50회씩 무작위
 // 시나리오로 돌려서, 성공률과 실행 시간을 CSV로 출력한다.
 //
-// (로봇 40대는 이 맵 크기·완전 무작위 배치 조합에서는 PBS의 고정
-// 우선순위 구조상 초기 plan() 성공률이 16x16 빈 맵에서도 0%에 가까울
-// 만큼 너무 낮아서 제외했다 — 맵 문제가 아니라 "뒤 순위 로봇이 앞 로봇의
-// Tail Reservation에 점점 막히는" PBS 자체의 한계로 직접 확인했다.)
+// 로봇 40대는 이 맵 크기·완전 무작위 배치 조합에서는 PBS의 고정 우선순위
+// 구조상 초기 plan() 성공률이 낮을 수 있다 — 맵 문제가 아니라 "뒤 순위
+// 로봇이 앞 로봇의 Tail Reservation에 점점 막히는" PBS 자체의 한계다.
+// find_solvable_scenario_and_run이 kMaxAttempts(200번)까지 재시도해도 못
+// 찾으면 plan_ok=false로 기록하고 넘어가므로, 40대 구간은 plan_attempts와
+// plan_ok 컬럼을 함께 확인해서 "초기 설계 자체의 난이도"를 읽어야 한다.
 //
 // 한 시나리오의 흐름:
 //   1. plan()으로 초기 경로를 계획한다.
@@ -80,7 +82,9 @@ std::vector<Agent> make_random_agents(const std::vector<Cell>& free_cells, int n
     std::vector<Cell> shuffled_goals = free_cells;
     std::shuffle(shuffled_starts.begin(), shuffled_starts.end(), rng);
     std::shuffle(shuffled_goals.begin(), shuffled_goals.end(), rng);
-
+    
+    // 문제점: 에이전트 A와 에이전트 B가 동일한 시작점과 끝점을 가질 수 있다.
+    // 그러나, plan에서 실패하므로 큰 문제는 아니다.
     std::vector<Agent> agents;
     for (int i = 0; i < num_agents; ++i) {
         agents.push_back(Agent{i, shuffled_starts[i], shuffled_goals[i]});
@@ -214,7 +218,7 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
     }
     int current_time = 0;
     if (!path_cells.empty()) {
-        std::uniform_int_distribution<size_t> idx_dist(0, path_cells.size() - 1); // 실제 겹치는 점 중 하나를 균등한 확률로 뽑음.
+        std::uniform_int_distribution<size_t> idx_dist(0, path_cells.size() - 1); // 실제 겹치는 점 중 장애물 하나를 균등한 확률로 뽑음.
         const SpaceTimeCell& chosen = path_cells[idx_dist(rng)];
         blocking_cell = Cell{chosen.x, chosen.y};
         current_time = chosen.t - 1;
@@ -402,7 +406,7 @@ std::string run_task(const Task& task) {
 }  // namespace
 
 int main() {
-    const std::vector<int> agent_counts = {5, 10, 20};
+    const std::vector<int> agent_counts = {5, 10, 20, 40};
     const int kRepeats = 50;
 
     struct NamedMap {

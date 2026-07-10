@@ -55,7 +55,7 @@ bool PBS::register_path(int agent_id, const Path& path) {
 }
 
 std::optional<PBSResult> PBS::plan(const std::vector<Agent>& agents) {
-    std::unordered_set<int> seen_ids;
+    std::unordered_set<int> seen_ids; // 혹시 모를 중복 (agent=로봇 id 중복 제거)
     for (const Agent& agent : agents) {
         if (!seen_ids.insert(agent.id).second) {
             throw std::invalid_argument("PBS::plan: agents must not contain duplicate ids");

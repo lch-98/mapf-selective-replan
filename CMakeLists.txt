@@ -37,7 +37,22 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# ── pybind11를 빌드 시점에 자동으로 받아오기 ─────────────────────
+# GUI(bindings/, python/gui/)가 C++ 코어(mapf_core)를 파이썬에서 그대로
+# 호출할 수 있게 해주는 바인딩 라이브러리. GoogleTest와 똑같은 FetchContent
+# 패턴을 그대로 따른다 — pip 설치 같은 별도 준비 단계를 요구하지 않기 위해서다.
+# find_package(Python3 ...)를 먼저 해두면, 이 PC에 파이썬이 여러 개 깔려있어도
+# pybind11이 항상 같은 파이썬(Interpreter+Development 헤더가 있는 쪽)을 쓴다.
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+
+FetchContent_Declare(
+    pybind11
+    URL https://github.com/pybind/pybind11/archive/refs/tags/v2.13.6.zip
+)
+FetchContent_MakeAvailable(pybind11)
+
 # ── 하위 폴더의 CMakeLists.txt를 실행 ────────────────────────────
 add_subdirectory(core)
 add_subdirectory(tests)
 add_subdirectory(tools)
+add_subdirectory(bindings)
