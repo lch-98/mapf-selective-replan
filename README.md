@@ -10,7 +10,9 @@
 시공간적으로 마주칠 로봇만 다시 계획하고, 그래도 막히면 원인이 된 로봇만
 추가로 끌어들여 범위를 넓힌다."* 자세한 설계 배경과 선행 연구와의 차별점은
 [`DESIGN.md`](DESIGN.md)에, 단계별 구현 설명은 [`docs/`](docs/) 폴더에
-정리되어 있다.
+정리되어 있다. 실제 구현하면서 발견한 버그·설계 결정의 시간순 기록은
+[`docs/PROGRESS.md`](docs/PROGRESS.md)를 참고(Windows/Ubuntu 등 환경을
+옮겨서 작업할 때도 `git pull`만으로 맥락을 이어받을 수 있도록 남겨둔 문서).
 
 ---
 
@@ -51,7 +53,10 @@ Path_Planning_Core_/
 │   └── plots/                   생성된 그래프 PNG
 │
 ├── tests/                     GoogleTest 단위 테스트
-├── docs/                      단계별 설계/구현 설명 문서(00~08)
+├── docs/                      단계별 설계/구현 설명 문서(00~09) + 진행 이력
+│   ├── 00~08_*.md               단계별 설계/구현 설명(빌드 계획, Map/Agent, PBS, 벤치마크 등)
+│   ├── 09_dynamic_obstacles_plan.md  동적(움직이는) 장애물 지원 확장 설계 분석
+│   └── PROGRESS.md              구현 진행 이력(버그·설계 결정 로그, Windows/Ubuntu 공용 온보딩 문서)
 ├── DESIGN.md                  전체 연구/설계 로드맵(Phase 0~5), 선행 연구와의 관계
 └── CMakeLists.txt             최상위 빌드 스크립트
 ```
@@ -258,4 +263,6 @@ python app.py --map open --agents 10 --seed 43
 - [ ] Phase 4: Ubuntu + ROS2 + Gazebo 3D 시뮬레이션(TurtleBot3, 창고형 월드)
 - [ ] Phase 5: 정량 평가 정리(성공률, makespan, sum-of-costs, 재계획 시간)
 
-Phase 4/5의 상세 계획은 [`DESIGN.md`](DESIGN.md) §5, §6, §7 참고.
+Phase 4/5의 상세 계획은 [`DESIGN.md`](DESIGN.md) §5, §6, §7 참고. 정적 장애물
+기반 PBS를 동적(움직이는) 장애물 지원으로 확장하는 별도 분석은
+[`docs/09_dynamic_obstacles_plan.md`](docs/09_dynamic_obstacles_plan.md) 참고.
