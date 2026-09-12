@@ -343,3 +343,49 @@ TurtleBot3 N대 네임스페이스 분리 배치, 창고형 월드, Gazebo actor
 
 동적(움직이는) 장애물 지원으로 PBS 자체를 확장하는 별도 분석은
 [`09_dynamic_obstacles_plan.md`](09_dynamic_obstacles_plan.md) 참고.
+
+---
+
+## `try_replan_set` 검토 → swap 충돌 버그 + 벤치마크 사각지대 수정 (2026-09-12)
+
+`try_replan_set()`에서 `register_path()`가 실패하는 경우를 따져보다가 2건을
+발견·수정했다(둘 다 사용자 질문에서 출발).
+
+### 1. swap(edge) 충돌을 성공으로 반환하던 버그 (커밋 cf22720)
+
+`register_path()`가 vertex는 `reserve_if_unowned`로 검사하지만 edge는
+`reserve_edge`로 **기록만** 했다. edge 검사(`is_edge_occupied`)는 A* 안에만
+있어서, `replan()`에서 옛 경로를 A* 없이 그대로 등록하는 non-working 로봇은
+앞 순서 working 로봇의 새 경로와 서로 자리를 맞바꿔도 아무도 검사하지 않았다
+(working 로봇의 A*는 뒤 순서 로봇이 아직 등록 전이라 못 보고, non-working
+로봇은 A*를 안 돌린다). → 등록 전에 `is_edge_occupied`로 검사해 거절하도록
+수정. 거절되면 기존 Tier 1 흐름이 그 로봇을 구조 로봇으로 추가한다.
+회귀 테스트 `Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath` 추가
+(수정 전 코드에서 실패하는 것 확인).
+
+### 2. 벤치마크가 "로봇 바로 위에 장애물"을 만들던 사각지대
+
+`collect_path_cells`/추가 장애물 후보가 로봇들의 **처음 출발점(t=0)**만
+걸러내고, `current_time` 시점에 로봇이 서 있는 칸은 확인하지 않았다. 로봇 B가
+t-1에 칸 X를 지나가고 A가 t에 X로 들어오는 정상 경로에서 A의 (X,t)가 뽑히면,
+`current_time=t-1`에 B가 장애물 안에 서 있게 된다(A가 X에서 대기 중인 경우도
+같음). 현실에 없는 상황이고, 두 방법 모두 `register_path` 시작 칸에서 무조건
+실패한다. 직접 세어보니 344개 시나리오 중 16개(4.7%)가 이 경우였고 16개 전부
+양쪽 실패 — 선택적 재계획 실패 44개 중 36%가 이 가짜 실패였다.
+→ `someone_stands_on()`을 추가해 두 후보 목록 모두에서 제외(2D GUI의
+`handle_click` 사전 검증과 같은 기준). 수정 후 다시 세어서 0건 확인.
+
+### 결과 (CSV·그래프 재생성)
+
+실패 수(344개 중): full_replan 97 → 93, selective_replan 42 → 31.
+(기존 CSV는 swap 수정 전 데이터라 두 수정이 함께 반영된 값이다. swap 수정만
+적용했을 때 selective 실패는 42 → 44로 오히려 늘었다 — 예전엔 swap 충돌이
+있는 해를 성공으로 셌기 때문. 또 장애물 후보가 바뀌어 뽑히는 시나리오 자체가
+달라졌으므로 같은 시나리오끼리의 비교는 아니다.)
+
+### 남은 과제
+
+`try_replan_set`에서 working 로봇의 A*는 성공했는데 등록이 실패하는 경우(Tail
+충돌: 도착 후 앞 순서 로봇이 목적지를 지나감)는 `out_blocked`/`out_blocked_owner`를
+채우지 않아 에스컬레이션 없이 바로 `full_replan`으로 간다. 원인 로봇은
+`get_owner`로 알 수 있으므로 넘겨주면 Tier 1로 풀 여지가 있다.

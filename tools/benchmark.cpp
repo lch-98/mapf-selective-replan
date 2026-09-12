@@ -92,6 +92,22 @@ std::vector<Agent> make_random_agents(const std::vector<Cell>& free_cells, int n
     return agents;
 }
 
+// path에서 t 시점에 로봇이 서 있는 칸. PBS::position_at(private)과 같은 규칙이다
+// — 경로가 t보다 짧으면 이미 도착해서 목적지에 머무는 중(Tail)으로 본다.
+Cell position_at(const Path& path, int t) {
+    int index = std::max(0, t - path.front().t);
+    if (static_cast<size_t>(index) >= path.size()) return Cell{path.back().x, path.back().y};
+    return Cell{path[static_cast<size_t>(index)].x, path[static_cast<size_t>(index)].y};
+}
+
+// t 시점에 어느 로봇이든 cell 위에 서 있는가?
+bool someone_stands_on(const PBSResult& paths, Cell cell, int t) {
+    for (const auto& [id, path] : paths) {
+        if (position_at(path, t) == cell) return true;
+    }
+    return false;
+}
+
 // initial의 모든 경로에서 (칸, 시각) 쌍을 전부 모은다 — "장애물이 실제로
 // 누군가의 길을 막는 시점"을 고르는 데 쓰인다. 두 종류의 칸은 제외한다:
 //   - start 칸(t=0): 장애물이 당장 출발도 못 하게 막아버리면 "재계획"이
@@ -118,6 +134,15 @@ std::vector<Agent> make_random_agents(const std::vector<Cell>& free_cells, int n
 // 조용히 실패해버려서, "재계획으로 우회 가능한 충돌"이 아닌 데이터가 CSV에
 // 섞여 들어간다(직접 코드를 추적해서 확인한 사각지대). all_goals와 똑같은
 // 방식으로 all_starts(모든 로봇의 시작점 집합)도 걸러낸다.
+//
+// 주의 3: all_starts는 "t=0의 위치"만 걸러낸다. current_time(=t-1)이 0보다
+// 크면 로봇들은 이미 움직인 뒤라, 다른 로봇 B가 t-1에 마침 그 칸을 지나가는
+// 중일 수 있다(B가 앞서 지나가고 A가 뒤따라 들어오는 정상 경로). A가 그 칸에서
+// 대기 중이어도 마찬가지다. 그러면 "로봇 바로 위에 장애물이 생기는" 현실에
+// 없는 상황이 되어 두 방법 모두 register_path 시작 칸에서 무조건 실패한다
+// (수정 전 벤치마크 344개 중 16개가 이 경우였고 전부 양쪽 실패 — 직접 세어서
+// 확인). 그래서 t-1 시점에 그 칸 위에 서 있는 로봇이 있으면 후보에서 뺀다.
+// (2D GUI도 "현재 로봇이 있는 칸"에는 장애물을 못 놓게 막는다.)
 std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
                                                const std::vector<Cell>& all_goals,
                                                const std::vector<Cell>& all_starts) {
@@ -143,6 +168,8 @@ std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
                 }
             }
             if (is_anyones_start) continue;  // 다른 로봇의 시작점과 우연히 겹침 — 후보 제외
+            // current_time(=t-1)에 누군가 그 칸 위에 서 있음 — 후보 제외(주의 3)
+            if (someone_stands_on(initial, here, path[i].t - 1)) continue;
             cells.push_back(path[i]);
         }
     }
@@ -231,6 +258,8 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
     // current_time이 0인 경우(위 fallback 분기) t=0이 검사 범위에 들어가므로,
     // 여기서도 all_starts와 겹치는 칸은 똑같은 이유로 제외해야 한다 — 그렇지
     // 않으면 주 장애물만 고쳐도 추가 장애물이 같은 사각지대를 재현한다.
+    // current_time > 0이면 all_starts만으로는 부족하므로, current_time에 로봇이
+    // 서 있는 칸도 제외한다(collect_path_cells의 주의 3과 같은 이유).
     std::vector<Cell> candidates;
     for (const Cell& cell : free_cells) {
         if (cell == blocking_cell) continue;
@@ -250,6 +279,7 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
             }
         }
         if (is_anyones_start) continue;
+        if (someone_stands_on(initial, cell, current_time)) continue;
         candidates.push_back(cell);
     }
     std::shuffle(candidates.begin(), candidates.end(), rng);
