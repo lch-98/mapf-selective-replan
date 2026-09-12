@@ -153,7 +153,21 @@ def plot_runtime_box(df: pd.DataFrame, out_dir: Path) -> None:
         # 화면에" 장점은 유지하면서, 숫자를 지수 변환 없이 바로 읽게 한다.
         # 눈금 위치를 고정 목록으로 직접 지정해서(자동 minor tick이 만드는
         # 0.6, 0.7, 0.8 같은 지저분한 촘촘한 라벨을 피한다).
-        tick_values = [0.2, 0.5, 1, 2, 5, 10, 20, 50]
+        # 후보 목록은 수십 초까지 넉넉히 두고, 실제 데이터 범위 안의 값만 쓴다 —
+        # 대규모 실험(--large)은 수 초까지 올라가므로 고정 목록(~50ms)으로는
+        # 위쪽 눈금이 비어 버린다. set_yticks는 범위 밖 눈금이 있으면 축을
+        # 넓혀버리므로 범위 밖 후보는 빼야 한다. sharey라 두 맵 전체 기준.
+        ok_ms = pd.concat([
+            df[(df["plan_ok"] == 1) & (df["full_replan_ok"] == 1)]["full_replan_ms"],
+            df[(df["plan_ok"] == 1) & (df["selective_replan_ok"] == 1)]["selective_replan_ms"],
+        ])
+        candidates = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500,
+                      1000, 2000, 5000, 10000, 20000, 50000]
+        if len(ok_ms) > 0:
+            lo, hi = ok_ms.min(), ok_ms.max()
+            tick_values = [v for v in candidates if lo / 2 <= v <= hi * 2]
+        else:
+            tick_values = candidates
         ax.set_yticks(tick_values)
         ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
         ax.yaxis.set_minor_formatter(mticker.NullFormatter())

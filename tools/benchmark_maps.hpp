@@ -54,12 +54,15 @@ constexpr int kMapSize = 32;
 //  29 ................................
 //  30 ................................
 //  31 ................................
-inline Map make_open_map() {
-    std::vector<std::string> rows(kMapSize, std::string(kMapSize, '.'));
+//
+// size를 바꾸면(규모 확장 실험, run_benchmark --large) 같은 패턴을 그 크기로
+// 넓혀서 만든다 — 기둥 간격·크기는 그대로라 "빈 공간 비율"이 유지된다.
+inline Map make_open_map(int size = kMapSize) {
+    std::vector<std::string> rows(size, std::string(size, '.'));
 
     // 6칸 간격으로 3x3 기둥을 박는다. 가장자리는 비워서 통행로를 보장한다.
-    for (int by = 6; by < kMapSize - 3; by += 8) {
-        for (int bx = 6; bx < kMapSize - 3; bx += 8) {
+    for (int by = 6; by < size - 3; by += 8) {
+        for (int bx = 6; bx < size - 3; bx += 8) {
             for (int y = by; y < by + 3; ++y) {
                 for (int x = bx; x < bx + 3; ++x) {
                     rows[y][x] = '#';
@@ -112,14 +115,16 @@ inline Map make_open_map() {
 //  29 ................................
 //  30 ................................
 //  31 ................................
-inline Map make_corridor_map() {
-    std::vector<std::string> rows(kMapSize, std::string(kMapSize, '.'));
+//
+// size를 바꾸면(규모 확장 실험) 같은 선반 패턴을 그 크기로 넓혀서 만든다.
+inline Map make_corridor_map(int size = kMapSize) {
+    std::vector<std::string> rows(size, std::string(size, '.'));
 
     // 4칸 주기로 폭 3칸짜리 선반(벽)을 깔되, 선반과 선반 사이 1칸은
     // 항상 비워서 복도로 남긴다. 가로 선반과 세로 선반을 번갈아 배치해
     // 교차로 형태의 좁은 통로망을 만든다.
-    for (int by = 2; by < kMapSize - 3; by += 4) {
-        for (int bx = 2; bx < kMapSize - 3; bx += 4) {
+    for (int by = 2; by < size - 3; by += 4) {
+        for (int bx = 2; bx < size - 3; bx += 4) {
             for (int y = by; y < by + 3; ++y) {
                 for (int x = bx; x < bx + 3; ++x) {
                     rows[y][x] = '#';

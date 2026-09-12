@@ -134,10 +134,16 @@ Windows(멀티 컨피그 MSBuild)와 Linux(단일 컨피그 Makefile/Ninja) 모�
 
 ### 실행 인자
 
-`run_benchmark`는 **명령줄 인자를 받지 않는다**. 맵 종류(open/corridor),
-로봇 수(5/10/20/40), 반복 횟수(50회) 등은 전부 `tools/benchmark.cpp`
-안에 상수로 고정되어 있어서, 값을 바꾸고 싶으면 소스를 수정하고 다시
-빌드해야 한다. 실행 결과는 표준 출력(stdout)으로 CSV가 그대로 흘러나오는
+`run_benchmark`는 인자 없이 실행하면 기본 설정(32x32 맵 open/corridor,
+로봇 5/10/20/40대, 50회, 추적 단계 1)으로 돈다. 아래 옵션으로 바꿀 수 있다:
+
+| 옵션 | 기본값 | 설명 |
+|---|---|---|
+| `--large` | 꺼짐 | 규모 확장 실험: 64x64 맵, 로봇 50/100/150/200대 (장애물은 그대로 1~3칸) |
+| `--repeats N` | 50 | 맵 x 로봇 수 조합마다 반복 횟수 |
+| `--tiers K` | 1 | 선택적 재계획이 "막은 로봇"을 몇 단계까지 추적할지(`PBSConfig::max_escalation_tiers`). 시나리오 생성과 무관해서 K만 바꿔 돌리면 같은 시나리오에서 비교된다 |
+
+실행 결과는 표준 출력(stdout)으로 CSV가 그대로 흘러나오는
 구조라, 아래처럼 셸 리다이렉션(`>`)으로 파일에 받아써야 한다 — `>` 뒤의
 경로는 프로그램 인자가 아니라 셸이 표준 출력을 파일로 돌려주는 문법이다.
 
@@ -171,6 +177,24 @@ python tools/plot_benchmark.py tools/results/benchmark_5_10_20_40.csv tools/plot
 | `runtime_box.png` | 로봇 수별 실행시간(ms) 분포 박스플롯(로그 스케일) |
 | `escalation_tier.png` | 선택적 재계획이 Tier 0 / Tier 1+ / 안전망 중 어디서 끝났는지 비율 |
 | `plan_attempts.png` | 로봇 수가 늘수록 초기 배치 자체의 재시도 횟수(=난이도)가 어떻게 변하는지 |
+
+추적 단계 수(`--tiers K`)를 바꿔 돌린 CSV 여러 개를 한 그림에 겹쳐 비교하려면
+`tools/plot_tiers.py`를 쓴다. 첫 인자는 저장 폴더, 나머지는 `K=CSV경로` 쌍이다:
+
+```bash
+for k in 1 2 3 5; do
+  ./build/tools/Release/run_benchmark.exe --large --tiers $k > tools/results/benchmark_large_tiers$k.csv
+done
+python tools/plot_tiers.py tools/plots_tiers \
+  1=tools/results/benchmark_large_tiers1.csv 2=tools/results/benchmark_large_tiers2.csv \
+  3=tools/results/benchmark_large_tiers3.csv 5=tools/results/benchmark_large_tiers5.csv
+```
+
+| 파일 | 내용 |
+|---|---|
+| `tiers_resolved.png` | 안전망(전체 재계획) 없이 Tier 0~K 안에서 해결된 비율 |
+| `tiers_runtime.png` | 재계획 1회 시간의 중앙값(성공/실패 무관, 로그 축) |
+| `tiers_speedup.png` | 같은 시나리오끼리 짝지은 속도 향상(전체 ÷ 선택)의 중앙값 |
 
 ---
 

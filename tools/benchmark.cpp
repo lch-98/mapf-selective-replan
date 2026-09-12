@@ -38,9 +38,11 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <random>
 #include <sstream>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -316,7 +318,7 @@ bool obstacles_actually_block_someone(const std::vector<Agent>& agents, const PB
 // 여기서는 plan_ok=true가 항상 보장된다.
 ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents,
                                  const PBSResult& initial, const std::vector<Cell>& obstacles,
-                                 int current_time) {
+                                 int current_time, const PBSConfig& replan_config) {
     ScenarioResult result;
     result.plan_ok = true;
 
@@ -331,7 +333,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 
     // 방법 B: 선택적 재계획(Tier 0/1/안전망).
     {
-        PBS pbs_b(map);
+        PBS pbs_b(map, AStarConfig{}, replan_config);
         auto t0 = std::chrono::steady_clock::now();
         std::optional<ReplanResult> selective = pbs_b.replan(agents, initial, obstacles, current_time);
         result.selective_replan_ms = elapsed_ms(t0);
@@ -355,7 +357,8 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 //
 // max_attempts번 안에 못 찾으면(극히 드문 경우) 마지막 실패를 그대로
 // plan_ok=false로 기록하고 멈춘다 — 무한 루프를 막기 위한 안전장치다.
-ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, std::mt19937& rng) {
+ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, std::mt19937& rng,
+                                              const PBSConfig& replan_config) {
     constexpr int kMaxAttempts = 200;
 
     std::vector<Cell> free_cells = collect_free_cells(map); // 벽이 아닌 모든 Cell들을 수집
@@ -394,7 +397,8 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
             continue;  // 이번 장애물은 아무도 안 막음 — 처음부터 다시 뽑는다.
         }
 
-        ScenarioResult result = run_one_scenario(map, agents, *initial, obstacles, current_time);
+        ScenarioResult result =
+            run_one_scenario(map, agents, *initial, obstacles, current_time, replan_config);
         result.plan_attempts = attempt;
         return result;
     }
@@ -414,6 +418,7 @@ struct Task {
     int num_agents;
     int trial;
     uint32_t seed;  // 이 task 전용 시드 — 스레드 간에 절대 공유하지 않는다.
+    PBSConfig replan_config;  // 방법 B(replan)의 설정(--tiers). 모든 task가 같은 값.
 };
 
 // 작업 하나를 처리해서 CSV 한 줄(개행 포함)을 문자열로 만들어 돌려준다.
@@ -423,7 +428,8 @@ struct Task {
 // 어떤 순서로 끝났든 상관없이) 한 번에 출력한다.
 std::string run_task(const Task& task) {
     std::mt19937 rng(task.seed);  // 이 task만의 독립 RNG — 다른 스레드와 공유 없음.
-    ScenarioResult r = find_solvable_scenario_and_run(*task.map, task.num_agents, rng);
+    ScenarioResult r =
+        find_solvable_scenario_and_run(*task.map, task.num_agents, rng, task.replan_config);
 
     std::ostringstream out;
     out << task.map_name << "," << task.num_agents << "," << task.trial << ","
@@ -435,17 +441,45 @@ std::string run_task(const Task& task) {
 
 }  // namespace
 
-int main() {
-    const std::vector<int> agent_counts = {5, 10, 20, 40};
-    const int kRepeats = 50;
+int main(int argc, char** argv) {
+    // 기본 실행: 32x32 맵, 로봇 5/10/20/40대, 50회(기존 결과와 동일한 설정).
+    // --large    : 규모 확장 실험 — 64x64 맵, 로봇 50/100/150/200대.
+    //              장애물은 그대로 1~3칸이라 "넓은 곳에서 국소적으로 막히는"
+    //              상황이 된다. 전체 재계획은 로봇 수에 비례해 비싸지고,
+    //              선택적 재계획은 영향받은 로봇만 다시 계산하므로 규모가 커질수록
+    //              시간 차이가 벌어지는지를 보는 실험이다.
+    // --repeats N: 반복 횟수(기본 50).
+    // --tiers K  : 선택적 재계획이 "막은 로봇"을 몇 단계까지 추적할지
+    //              (PBSConfig::max_escalation_tiers, 기본 1). 시나리오 생성은
+    //              이 값과 무관하므로 K만 바꿔 돌리면 같은 시나리오에서 비교된다.
+    bool large = false;
+    int repeats = 50;
+    PBSConfig replan_config;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--large") {
+            large = true;
+        } else if (arg == "--repeats" && i + 1 < argc) {
+            repeats = std::atoi(argv[++i]);
+        } else if (arg == "--tiers" && i + 1 < argc) {
+            replan_config.max_escalation_tiers = std::atoi(argv[++i]);
+        } else {
+            std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K]\n";
+            return 1;
+        }
+    }
+    const std::vector<int> agent_counts =
+        large ? std::vector<int>{50, 100, 150, 200} : std::vector<int>{5, 10, 20, 40};
+    const int kRepeats = repeats;
+    const int map_size = large ? 64 : kMapSize;
 
     struct NamedMap {
         const char* name;
         Map map;
     };
     std::vector<NamedMap> maps;
-    maps.push_back({"open", make_open_map()});
-    maps.push_back({"corridor", make_corridor_map()});
+    maps.push_back({"open", make_open_map(map_size)});
+    maps.push_back({"corridor", make_corridor_map(map_size)});
 
     // (A안 명시) 이 CSV의 모든 행은 "장애물이 생기기 전, 초기 plan()에
     // 이미 성공한 시나리오"만 표본으로 삼는다 — 초기 계획 자체가 실패하는
@@ -467,7 +501,8 @@ int main() {
         for (int num_agents : agent_counts) {
             for (int trial = 0; trial < kRepeats; ++trial) {
                 uint32_t seed = kBaseSeed + static_cast<uint32_t>(tasks.size());
-                tasks.push_back(Task{&named_map.map, named_map.name, num_agents, trial, seed});
+                tasks.push_back(
+                    Task{&named_map.map, named_map.name, num_agents, trial, seed, replan_config});
             }
         }
     }
