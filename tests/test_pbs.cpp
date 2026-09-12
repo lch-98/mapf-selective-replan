@@ -376,3 +376,64 @@ TEST(PBSTest, LowerPriorityTailReservationDoesNotErasePriorAgentVertex) {
         for (const auto& other : (*result)[1]) EXPECT_FALSE(cell == other);
     }
 }
+
+TEST(PBSReplanTest, Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath) {
+    // 5x3 격자:
+    //   y=0:  # . . . #
+    //   y=1:  . . . . .
+    //   y=2:  # # # . #     ← (3,2)는 N이 비켜설 수 있는 막다른 칸
+    // 로봇0(W, 1순위): (0,1)->(4,1) 아래 행 직선. t=1에 (2,1)에 장애물이 생겨
+    //   위 행으로 우회한다. 유일한 최단 경로:
+    //   (1,1)t1 (1,0)t2 (2,0)t3 (3,0)t4 (3,1)t5 (4,1)t6.
+    // 로봇1(N, 2순위): (3,1)->(1,0). 옛 경로 (3,1)t0 (3,0)t1 (2,0)t2 (1,0)t3는
+    //   장애물과 안 겹쳐서 working_ids에 안 들어가고, 옛 경로 그대로 등록된다.
+    //
+    // t=2→3에 W는 (1,0)→(2,0), N은 (2,0)→(1,0) — 서로 자리를 맞바꾸는 swap
+    // 충돌이다. vertex는 안 겹치므로 reserve_if_unowned는 통과하고, W의 A*는
+    // 아직 등록 안 된 N을 모르므로 이 충돌은 register_path의 edge 검사로만
+    // 잡을 수 있다. 잡히면 N이 구조 로봇으로 추가되고(Tier 1), N은 (3,2)에서
+    // W가 지나가길 기다렸다가 (1,0)으로 가면 된다.
+    Map map(std::vector<std::string>{
+        "#...#",
+        ".....",
+        "###.#",
+    });
+    PBS pbs(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 1}, Cell{4, 1}},  // W
+        Agent{1, Cell{3, 1}, Cell{1, 0}},  // N
+    };
+
+    PBSResult previous_paths;
+    previous_paths[0] = Path{
+        SpaceTimeCell{0, 1, 0}, SpaceTimeCell{1, 1, 1}, SpaceTimeCell{2, 1, 2},
+        SpaceTimeCell{3, 1, 3}, SpaceTimeCell{4, 1, 4},
+    };
+    previous_paths[1] = Path{
+        SpaceTimeCell{3, 1, 0}, SpaceTimeCell{3, 0, 1}, SpaceTimeCell{2, 0, 2},
+        SpaceTimeCell{1, 0, 3},
+    };
+
+    auto result = pbs.replan(agents, previous_paths, {Cell{2, 1}}, /*current_time=*/1);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 1);
+    EXPECT_EQ(result->rescued_ids, std::vector<int>{1});
+    EXPECT_EQ(result->paths.at(1).back().x, 1);
+    EXPECT_EQ(result->paths.at(1).back().y, 0);
+
+    // 도착 후에는 목적지에 머문다(Tail)고 보고 t 시점 위치를 구한다.
+    auto at = [](const Path& path, int t) {
+        const SpaceTimeCell& c = t >= static_cast<int>(path.size()) ? path.back() : path[t];
+        return Cell{c.x, c.y};
+    };
+
+    const Path& w = result->paths.at(0);
+    const Path& n = result->paths.at(1);
+    int horizon = static_cast<int>(std::max(w.size(), n.size()));
+    for (int t = 0; t < horizon; ++t) {
+        EXPECT_FALSE(at(w, t) == at(n, t)) << "vertex 충돌 t=" << t;
+        bool swapped = at(w, t) == at(n, t + 1) && at(w, t + 1) == at(n, t);
+        EXPECT_FALSE(swapped) << "swap 충돌 t=" << t << "->" << t + 1;
+    }
+}

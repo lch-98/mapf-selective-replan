@@ -32,6 +32,14 @@ bool PBS::register_path(int agent_id, const Path& path) {
 
         if (i + 1 < path.size()) {
             const SpaceTimeCell& next = path[i + 1];
+            // edge도 등록 전에 검사한다: A*를 거친 경로는 이미 edge 검사를
+            // 받았지만, replan()에서 옛 경로를 A* 없이 그대로 등록하는 로봇은
+            // 앞 순서 로봇의 새 경로와 서로 자리를 맞바꾸는(swap) 충돌이 있어도
+            // 여기서만 잡을 수 있다(reserve_edge는 양방향을 기록하므로
+            // is_edge_occupied 한 번으로 반대 방향 이동을 확인할 수 있다).
+            if (table_.is_edge_occupied(cell.x, cell.y, next.x, next.y, cell.t)) {
+                return false;
+            }
             table_.reserve_edge(cell.x, cell.y, next.x, next.y, cell.t);
         }
     }
@@ -145,8 +153,8 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
             // 이 등록은 옛경로 그대로를 재등록한다는 의미이다.
             //
             // 이 등록이 거절될 수도 있다 — 이미 재탐색된 working_ids 로봇의
-            // 새 경로(Tail 포함)가, 이 "안 건드린" 로봇의 옛 Tail
-            // Reservation과 정확히 그 (칸,시각)에서 충돌하는 경우다(06장
+            // 새 경로(Tail 포함)가, 이 "안 건드린" 로봇의 옛 경로와 같은
+            // (칸,시각)에서 겹치거나 서로 자리를 맞바꾸는 경우다(06장
             // 6.5절이 말하는 "K가 비켜주면 풀리는데 못 비키는" 상황의 한
             // 형태). 이때 거절된 칸의 현재 주인은 이미 working_ids에 있는
             // 로봇이라 get_owner로 추적해도 새 후보를 못 찾는다 — 추적해야
