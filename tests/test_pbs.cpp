@@ -10,6 +10,46 @@
 
 using namespace mapf;
 
+namespace {
+
+// 모든 로봇 쌍에 대해 vertex 충돌(같은 시각 같은 칸)과 swap 충돌(서로 자리를
+// 맞바꾸기)이 없는지 확인한다. 도착 후에는 목적지에 머문다(Tail)고 본다.
+// 먼저 각 경로의 i번째 칸이 시각 i인지(시각이 건너뛰지 않는지) 확인한다 —
+// 아래 충돌 검사와 position_at, GUI가 모두 이 전제로 위치를 읽기 때문이다.
+void expect_conflict_free(const PBSResult& paths) {
+    for (const auto& [id, path] : paths) {
+        for (size_t i = 0; i < path.size(); ++i) {
+            if (path[i].t != static_cast<int>(i)) {
+                ADD_FAILURE() << "로봇" << id << "의 경로 시각이 " << i << "번째 칸에서 어긋남(t="
+                              << path[i].t << ")";
+                return;
+            }
+        }
+    }
+    auto at = [](const Path& path, int t) {
+        const SpaceTimeCell& c = t >= static_cast<int>(path.size()) ? path.back() : path[t];
+        return Cell{c.x, c.y};
+    };
+    int horizon = 0;
+    for (const auto& [id, path] : paths) {
+        horizon = std::max(horizon, static_cast<int>(path.size()));
+    }
+    for (const auto& [id_a, a] : paths) {
+        for (const auto& [id_b, b] : paths) {
+            if (id_a >= id_b) continue;
+            for (int t = 0; t < horizon; ++t) {
+                EXPECT_FALSE(at(a, t) == at(b, t))
+                    << "vertex 충돌: 로봇" << id_a << "-로봇" << id_b << " t=" << t;
+                bool swapped = at(a, t) == at(b, t + 1) && at(a, t + 1) == at(b, t);
+                EXPECT_FALSE(swapped)
+                    << "swap 충돌: 로봇" << id_a << "-로봇" << id_b << " t=" << t << "->" << t + 1;
+            }
+        }
+    }
+}
+
+}  // namespace
+
 TEST(PBSTest, RejectsAgentWhoseStartCellIsAlreadyOwnedAtThatTime) {
     // 3x1 통로: (0,0)-(1,0)-(2,0).
     // 로봇0(1순위): (1,0)->(0,0). t=0에 (1,0)에서 출발해 t=1에 (0,0)으로
@@ -166,13 +206,18 @@ TEST(PBSTest, FailsWhenHigherPriorityAgentForeverBlocksLowerPriorityGoal) {
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSTest, TailReservationRejectionIsDetectedNotSilentlyIgnored) {
+TEST(PBSTest, LowerPriorityAgentStepsAsideWhenHigherPriorityPassesItsGoal) {
     // 2x3 격자: (0,*) 세로 통로 + (1,*) 옆 칸.
     // 로봇0(1순위): (0,0)->(0,2) — (0,1)을 t=1에 지나간다.
-    // 로봇1(2순위): (0,1)->(0,1) — 제자리. 로봇0과 같은 이유로, 로봇1의
-    //   "영원히 머문다"는 Tail Reservation이 t=1에서 거절되어야 하고,
-    //   그 거절은 register_path가 false를 반환해 plan() 전체를 실패시켜야
-    //   한다 — 조용히 무시되어 "성공"으로 잘못 보고되면 안 된다.
+    // 로봇1(2순위): (0,1)->(0,1) — 제자리. 그대로 머물면 t=1에 로봇0과
+    //   부딪히지만, 옆 칸 (1,1)로 잠깐 비켰다가 돌아오면 풀린다. A*가 "도착 후
+    //   끝까지 머물 수 있는가"까지 보고 도착을 판정하므로(04장) 이 비켜주는
+    //   경로를 찾아야 한다.
+    //   (예전 A*는 t=0에 "이미 도착"으로 끝내서 register_path의 Tail 검사에서
+    //   실패했다. 그 Tail 검사가 조용히 무시되지 않는다는 점은 A* 없이 등록되는
+    //   옛 경로로 PBSReplanTest.NonWorkingAgentTailRejectionEscalatesToTier1이
+    //   확인한다.)
+    // 로봇2(3순위): (1,1)->(1,0).
     Map map(2, 3);
     PBS pbs(map);
 
@@ -184,7 +229,14 @@ TEST(PBSTest, TailReservationRejectionIsDetectedNotSilentlyIgnored) {
 
     auto result = pbs.plan(agents);
 
-    EXPECT_FALSE(result.has_value());
+    ASSERT_TRUE(result.has_value());
+    expect_conflict_free(*result);
+    const Path& path1 = result->at(1);
+    EXPECT_EQ(path1.back().x, 0);
+    EXPECT_EQ(path1.back().y, 1);
+    // t=1에는 (0,1)을 비워줘야 한다(로봇0이 지나가는 시각).
+    ASSERT_GE(path1.size(), 2u);
+    EXPECT_FALSE(path1[1].x == 0 && path1[1].y == 1);
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -436,4 +488,130 @@ TEST(PBSReplanTest, Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath) {
         bool swapped = at(w, t) == at(n, t + 1) && at(w, t + 1) == at(n, t);
         EXPECT_FALSE(swapped) << "swap 충돌 t=" << t << "->" << t + 1;
     }
+}
+
+TEST(PBSTest, LowerPriorityAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal) {
+    // 5x2 격자 (아래 행은 x=2만 열림):
+    //   y=0:  . . . . .
+    //   y=1:  # # . # #
+    // 로봇0(1순위): (0,0)->(4,0) 위 행 직선. t=2에 (2,0)을 지나간다.
+    // 로봇1(2순위): (2,1)->(2,0). A*는 t=1에 (2,0)에 도착하자마자 끝나지만,
+    //   도착 후 (2,0)에 머물면 t=2에 로봇0과 부딪힌다(Tail 충돌).
+    //   (2,1)에서 기다렸다가 t=3에 들어가면 충돌 없는 해가 있다.
+    Map map(std::vector<std::string>{
+        ".....",
+        "##.##",
+    });
+    PBS pbs(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 0}, Cell{4, 0}},
+        Agent{1, Cell{2, 1}, Cell{2, 0}},
+    };
+
+    auto result = pbs.plan(agents);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->at(1).back(), (SpaceTimeCell{2, 0, 3}));
+}
+
+TEST(PBSReplanTest, WorkingAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal) {
+    // 7x3 격자:
+    //   y=0:  . . . . . . .
+    //   y=1:  # # # # . . .
+    //   y=2:  # # # # . . .
+    // 로봇0(1순위): (0,0)->(6,0) 위 행 직선. t=5에 (5,0)을 지나간다. 장애물과 무관.
+    // 로봇1(2순위): (5,2)->(5,0). 옛 경로는 (5,1)에서 기다렸다가 t=6에 도착하는
+    //   충돌 없는 경로다. t=0에 (5,1)에 장애물이 생기면 working이 된다.
+    //
+    // 새 A*는 (4,*) 또는 (6,*) 쪽으로 돌아 t=4에 (5,0)에 도착하고 끝나지만,
+    // t=5에 로봇0이 지나가서 Tail 충돌이 난다. 막은 로봇 정보가 안 넘어가서
+    // Tier 1 없이 full_replan으로 가고, 거기서도 같은 이유로 실패한다.
+    // 실제로는 (4,1)에서 기다렸다가 t=6에 (5,0)에 도착하면 풀린다.
+    Map map(std::vector<std::string>{
+        ".......",
+        "####...",
+        "####...",
+    });
+    PBS pbs(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 0}, Cell{6, 0}},
+        Agent{1, Cell{5, 2}, Cell{5, 0}},
+    };
+
+    PBSResult previous_paths;
+    previous_paths[0] = Path{
+        SpaceTimeCell{0, 0, 0}, SpaceTimeCell{1, 0, 1}, SpaceTimeCell{2, 0, 2},
+        SpaceTimeCell{3, 0, 3}, SpaceTimeCell{4, 0, 4}, SpaceTimeCell{5, 0, 5},
+        SpaceTimeCell{6, 0, 6},
+    };
+    previous_paths[1] = Path{
+        SpaceTimeCell{5, 2, 0}, SpaceTimeCell{5, 1, 1}, SpaceTimeCell{5, 1, 2},
+        SpaceTimeCell{5, 1, 3}, SpaceTimeCell{5, 1, 4}, SpaceTimeCell{5, 1, 5},
+        SpaceTimeCell{5, 0, 6},
+    };
+
+    auto result = pbs.replan(agents, previous_paths, {Cell{5, 1}}, /*current_time=*/0);
+
+    ASSERT_TRUE(result.has_value());
+    const Path& path1 = result->paths.at(1);
+    EXPECT_EQ(path1.back().x, 5);
+    EXPECT_EQ(path1.back().y, 0);
+    EXPECT_GE(path1.back().t, 6);  // 로봇0이 (5,0)을 지나간 뒤에 도착해야 한다.
+    expect_conflict_free(result->paths);
+}
+
+TEST(PBSReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
+    // 7x3 격자:
+    //   y=0:  # # # # . # #     ← (4,0)은 N이 비켜설 수 있는 막다른 칸
+    //   y=1:  # # # . . . #
+    //   y=2:  . . . . . . .
+    // 로봇0(W, 1순위): (0,2)->(6,2) 아래 행 직선. t=3에 (4,2)에 장애물이 생겨
+    //   가운데 행으로 우회한다: (3,2)t3 (3,1)t4 (4,1)t5 (5,1)t6 (5,2)t7 (6,2)t8.
+    // 로봇1(N, 2순위): (4,1)->(4,1) 제자리. 장애물과 무관해서 working이 아니고,
+    //   옛 경로(t=0에 이미 도착해 영원히 머묾) 그대로 등록된다.
+    //
+    // Tier 0: W의 새 경로가 t=5에 (4,1)을 지나가므로 N의 옛 Tail이 t=5에서
+    // 거절되어야 한다. A* 없이 등록되는 옛 경로라 이 충돌은 register_path의
+    // Tail 검사로만 잡힌다 — 조용히 무시되면 Tier 0이 충돌 있는 해를 "성공"으로
+    // 반환한다. 거절되면 Tier 1에서 N이 구조 로봇이 되어 (4,0)으로 비켰다가
+    // 돌아온다.
+    //
+    // N은 t=0에 이미 도착했고 current_time=3이라, 새 경로를 옛 경로(t=0뿐)에
+    // 이어붙일 때 t=1,2를 목적지에 머문 칸으로 채워야 한다 — 시각이 건너뛰면
+    // expect_conflict_free의 시각 연속성 검사에서 걸린다.
+    Map map(std::vector<std::string>{
+        "####.##",
+        "###...#",
+        ".......",
+    });
+    PBS pbs(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 2}, Cell{6, 2}},  // W
+        Agent{1, Cell{4, 1}, Cell{4, 1}},  // N
+    };
+
+    PBSResult previous_paths;
+    previous_paths[0] = Path{
+        SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
+        SpaceTimeCell{3, 2, 3}, SpaceTimeCell{4, 2, 4}, SpaceTimeCell{5, 2, 5},
+        SpaceTimeCell{6, 2, 6},
+    };
+    previous_paths[1] = Path{SpaceTimeCell{4, 1, 0}};
+
+    auto result = pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 1);
+    EXPECT_EQ(result->rescued_ids, std::vector<int>{1});
+    expect_conflict_free(result->paths);
+    EXPECT_EQ(result->paths.at(1).back().x, 4);
+    EXPECT_EQ(result->paths.at(1).back().y, 1);
+
+    // 전체 재계획도 같은 이어붙이기를 쓰므로 똑같이 성립해야 한다.
+    auto full = pbs.full_replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    ASSERT_TRUE(full.has_value());
+    expect_conflict_free(*full);
 }

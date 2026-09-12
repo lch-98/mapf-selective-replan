@@ -383,9 +383,78 @@ t-1에 칸 X를 지나가고 A가 t에 X로 들어오는 정상 경로에서 A�
 있는 해를 성공으로 셌기 때문. 또 장애물 후보가 바뀌어 뽑히는 시나리오 자체가
 달라졌으므로 같은 시나리오끼리의 비교는 아니다.)
 
-### 남은 과제
+### 남은 과제 → 아래 섹션에서 해결
 
 `try_replan_set`에서 working 로봇의 A*는 성공했는데 등록이 실패하는 경우(Tail
 충돌: 도착 후 앞 순서 로봇이 목적지를 지나감)는 `out_blocked`/`out_blocked_owner`를
 채우지 않아 에스컬레이션 없이 바로 `full_replan`으로 간다. 원인 로봇은
 `get_owner`로 알 수 있으므로 넘겨주면 Tier 1로 풀 여지가 있다.
+
+---
+
+## A* 도착 판정을 Tail Reservation과 맞춤 + 재계획 경로 시각 끊김 수정 (2026-09-13)
+
+### 문제: "기다리면 풀리는데" 실패하던 Tail 충돌
+
+A*는 goal에 **도착한 순간** 탐색을 끝냈지만, `register_path`는 도착 후
+max_timestep까지 goal에 **영원히 머문다**고 보고 등록한다. 그래서 앞 순서
+로봇이 나중에(예: t=8) goal을 지나가면, A*가 찾은 경로(t=5 도착)는 등록에서
+거절됐다 — 옆에서 기다렸다가 t=9에 도착하면 풀리는 경우에도. 이때는 원인 로봇
+정보도 안 넘어가서 Tier 1 없이 `full_replan`으로 가고, 거기서도 같은 A*라 같은
+이유로 실패했다(Tier 1로 로봇을 더 끌어와도 순서·A*가 같아 해결 안 됨). 테스트 2개로
+재현(`plan()`: `LowerPriorityAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal`,
+`replan()`: `WorkingAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal`).
+
+### 수정 1: `space_time_astar.cpp` 도착 판정
+
+- 탐색 전에 goal이 마지막으로 예약된 시각(`goal_last_reserved`)을 구하고, 그보다
+  **뒤에 도착한 경우에만** 도착으로 인정한다. 아니면 탐색을 계속해 비켜 있다가/
+  기다렸다가 늦게 도착하는 길을 찾는다.
+- goal이 max_timestep까지 막혀 있으면(장애물, 목적지가 같은 앞 로봇의 Tail) 언제
+  도착해도 머물 수 없으므로 탐색 없이 바로 실패한다 — 예전 "43초 헛탐색" 같은
+  상황을 막는다.
+- 막은 (goal, 시각)을 `blocked_attempts`에 남겨 Tier 1이 원인 로봇을 추적할 수 있게 한다.
+
+이제 A*가 찾은 경로는 `register_path`의 Tail 검사에서 거절되지 않는다(그 검사는
+`replan()`이 옛 경로를 A* 없이 등록할 때의 안전망으로 남음).
+
+### 수정 2(검증 중 발견): 재계획 경로의 시각 끊김 — `pbs.cpp` `splice_paths()`
+
+벤치마크에 임시 전수 검사(모든 plan/full_replan/replan 결과의 충돌·장애물·
+출발/목적지·연속성)를 넣어보니 1197개 중 293개가 **시각이 건너뛴 경로**였다(충돌은
+0). 이미 도착한 로봇(옛 경로가 current_time 전에 끝남)을 다시 계획할 때
+`과거(t<current_time) + 새 경로(t>=current_time)`를 그냥 이어붙여 그 사이 시각이
+비었던 것 — 원래 있던 버그다. `position_at`과 GUI의 `sim_clock.position_at`은
+"i번째 칸 = 시각 i"로 위치를 읽으므로, 이번 수정으로 새로 생기는 "도착한 로봇이
+비켰다 돌아오는" 경로가 GUI에서 엉뚱한 칸에 그려질 수 있었다. → 이어붙이기를
+`splice_paths()`로 합치고, 빈 시각을 목적지에 머문 칸으로 채움(`try_replan_set`,
+`full_replan` 공용). 수정 후 전수 검사 0건.
+
+### 테스트 변경
+
+- 테스트 헬퍼 `expect_conflict_free()` 추가: 시각 연속성 + vertex/swap 충돌.
+- `TailReservationRejectionIsDetectedNotSilentlyIgnored` → 새 A*에서는 로봇1이 옆
+  칸으로 비켜서 **풀리는** 시나리오라 기대값이 틀려짐.
+  `LowerPriorityAgentStepsAsideWhenHigherPriorityPassesItsGoal`(성공+충돌 없음)로 변경.
+- 원래 의도("Tail 거절이 조용히 무시되지 않는다")는 A* 없이 등록되는 옛 경로로
+  옮김: `NonWorkingAgentTailRejectionEscalatesToTier1`(Tier 0 거절 → Tier 1 성공,
+  current_time=3이라 시각 채우기도 함께 검증 — 채우기를 빼면 실패하는 것 확인).
+- 전체 47개 통과(Debug/Release), Python `smoke_test.py` 통과, GUI를 headless로
+  240회 클릭 구동(도착 로봇이 비켜주는 경우 115회 포함) — 그려지는 위치·충돌·장애물
+  문제 0건.
+
+### 벤치마크 결과(CSV·그래프 재생성, 344/400 → 400/400)
+
+| | 수정 전 | 수정 후 |
+|---|---|---|
+| 초기 plan() 성공 표본 | 344 | 400 |
+| plan_attempts 평균(corridor 40 / open 40) | 186.8 / 91.3 | 1.1 / 1.0 |
+| full_replan 실패 | 93 | 2 |
+| selective_replan 실패 | 31 | 1 |
+| 안전망(-1)으로 끝난 수 | 4 | 43 |
+
+- 파일 머리 주석의 "40대는 PBS 고정 우선순위 한계로 plan() 성공률이 낮다"는
+  설명의 상당 부분이 사실은 이 A* 도착 판정 문제였다.
+- 안전망 비율 증가는 예전엔 plan() 실패로 빠지던 어려운 시나리오(40대)가 표본에
+  들어온 영향이 크다(표본이 달라져 같은 시나리오끼리의 비교는 아님).
+- 실행 시간: 최대 75ms(100ms 초과 0건), 전체 벤치마크 wall-time 약 1.6초.

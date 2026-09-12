@@ -11,6 +11,33 @@
 
 namespace mapf {
 
+namespace {
+
+// 재계획한 경로를 만든다: 옛 경로의 과거 구간(t < current_time) + 새로 찾은
+// 미래 구간(t >= current_time). 로봇이 이미 도착해서 옛 경로가 current_time
+// 전에 끝났다면(Tail 상태), 그 사이 시각에는 목적지에 머물러 있었으므로 그
+// 칸으로 채워 넣는다 — 빠뜨리면 시각이 건너뛰어 "경로의 i번째 칸 = 시각 i"
+// 라는 전제(position_at, GUI의 sim_clock 등)가 깨지고 로봇 위치를 잘못 읽는다.
+Path splice_paths(const Path& old_path, const Path& new_future, int current_time) {
+    Path full_path;
+    for (const SpaceTimeCell& cell : old_path) {
+        if (cell.t >= current_time) break;
+        full_path.push_back(cell);
+    }
+    if (!full_path.empty()) {
+        const SpaceTimeCell last = full_path.back();
+        for (int t = last.t + 1; t < current_time; ++t) {
+            full_path.push_back(SpaceTimeCell{last.x, last.y, t});
+        }
+    }
+    for (const SpaceTimeCell& cell : new_future) {
+        full_path.push_back(cell);
+    }
+    return full_path;
+}
+
+}  // namespace
+
 PBS::PBS(const Map& map, AStarConfig config, PBSConfig replan_config)
     : map_(map), config_(config), replan_config_(replan_config) {}
 
@@ -53,6 +80,10 @@ bool PBS::register_path(int agent_id, const Path& path) {
     // 머문다"고 주장하는 것과 정면으로 모순되므로 — 이는 조용히 넘어갈
     // 문제가 아니라 실제 충돌이다. 그래서 거절(false)이 한 번이라도
     // 생기면 전체를 실패로 보고한다.
+    //
+    // A*는 "도착 후 끝까지 목적지에 머물 수 있을 때만" 도착으로 인정하므로
+    // ([04장]) A*가 방금 찾은 경로는 여기서 거절되지 않는다. 이 검사가 실제로
+    // 충돌을 잡는 건 replan()에서 옛 경로를 A* 없이 그대로 등록할 때다.
     const SpaceTimeCell& last = path.back();
     for (int t = last.t; t <= config_.max_timestep; ++t) {
         if (!table_.reserve_if_unowned(last.x, last.y, t, agent_id)) {
@@ -188,14 +219,7 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
         }
 
         // 과거 구간(0~current_time-1)과 새로 찾은 미래 구간을 이어붙인다.
-        Path full_path;
-        for (const SpaceTimeCell& cell : old_path) {
-            if (cell.t >= current_time) break;
-            full_path.push_back(cell);
-        }
-        for (const SpaceTimeCell& cell : *astar_result.path) {
-            full_path.push_back(cell);
-        }
+        Path full_path = splice_paths(old_path, *astar_result.path, current_time);
 
         if (!register_path(agent.id, full_path)) return std::nullopt;
         result[agent.id] = full_path;
@@ -221,14 +245,7 @@ std::optional<PBSResult> PBS::full_replan(const std::vector<Agent>& agents,
         std::optional<Path> new_future = astar.search(here, agent.goal, current_time);
         if (!new_future.has_value()) return std::nullopt;
 
-        Path full_path;
-        for (const SpaceTimeCell& cell : old_path) {
-            if (cell.t >= current_time) break;
-            full_path.push_back(cell);
-        }
-        for (const SpaceTimeCell& cell : *new_future) {
-            full_path.push_back(cell);
-        }
+        Path full_path = splice_paths(old_path, *new_future, current_time);
 
         if (!register_path(agent.id, full_path)) return std::nullopt;
         result[agent.id] = full_path;
