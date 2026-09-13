@@ -11,7 +11,7 @@
 #   python app.py --map open --agents 10 --seed 43              (python/gui 폴더 안에서)
 # ─────────────────────────────────────────────────────────────────
 import argparse
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import mapf_py
 
@@ -58,8 +58,9 @@ class App:
         배치가 나오고, --seed 없이 시작했다면 매번 다른 배치가 나온다."""
         ...
 
-    def current_positions(self) -> Dict[int, "mapf_py.Cell"]:
-        """각 agent id -> 현재 시각(clock_sim.current_time)의 위치.
+    def current_positions(self) -> List["mapf_py.Cell"]:
+        """현재 시각(clock_sim.current_time)에 로봇들이 서 있는 칸 목록 —
+        왼쪽/오른쪽 패널 모두(첫 장애물 이후 두 패널의 경로가 달라지므로).
         장애물 클릭이 로봇 위치와 겹치는지 검증할 때 쓴다."""
         ...
 
@@ -67,7 +68,7 @@ class App:
     def is_failed(self) -> bool:
         """full_side/selective_side 중 하나라도 재계획에 실패했으면 True.
         이 상태에서는 SPACE(시간 진행)와 마우스 클릭(장애물 배치)이 모두
-        무시되고, R키로만 새로 시작할 수 있다."""
+        무시되고, ←로 실패 직전으로 되돌리거나 R키로 새로 시작할 수 있다."""
         ...
 
     def show_message(self, text: str, duration_sec: float = 2.0) -> None:
@@ -84,18 +85,36 @@ class App:
         호출한다."""
         ...
 
-    def _frozen_paths_at_current_time(self) -> "mapf_py.PBSResult":
-        """재계획 실패 시 보여줄 경로: 각 로봇의 과거 이동 이력은 그대로
-        보존하고, current_time 시점부터는 같은 자리에 멈춰 선 것으로
-        표시한다. 이게 없으면 실패해도 화면에 예전 성공 경로가 계속
-        그려져 "장애물을 뚫고 지나가는" 것처럼 보이는 착시가 생긴다."""
+    def _frozen_paths_at_current_time(self, base_paths: "mapf_py.PBSResult") -> "mapf_py.PBSResult":
+        """재계획 실패 시 보여줄 경로: base_paths(그 패널이 실패 직전까지
+        따라가던 경로)의 과거 이동 이력은 그대로 보존하고, current_time
+        시점부터는 같은 자리에 멈춰 선 것으로 표시한다. 이게 없으면 실패해도
+        화면에 예전 성공 경로가 계속 그려져 "장애물을 뚫고 지나가는" 것처럼
+        보이는 착시가 생긴다."""
+        ...
+
+    def waiting_agent_ids(self, paths: "mapf_py.PBSResult") -> set:
+        """이번 스텝(t -> t+1)에 제자리에 머물다가 나중에 다시 움직일 로봇 id
+        (= 양보하며 기다리는 로봇). 목적지 도착 후 머무는 로봇, 실패로 멈춘
+        로봇은 제외. draw()가 W키로 켠 강조 표시와 상태 바 개수에 쓴다."""
+        ...
+
+    def step_forward(self) -> None:
+        """SPACE: 직전 상태를 history에 쌓고 시간을 한 스텝 진행(실패 상태면 무시)."""
+        ...
+
+    def step_back(self) -> None:
+        """← / Backspace: 마지막 SPACE 직전 상태로 복원한다. 그 시각 이후에 놓은
+        장애물과 재계획 결과도 함께 취소된다. 실패 상태에서도 동작한다."""
         ...
 
     def recompute(self) -> None:
         """현재 obstacles/current_time을 가지고 full_replan과 replan을
-        모두 호출해서 full_side/selective_side를 갱신한다. 아무 로봇도
-        영향받지 않은 경우(PBS.path_hits_obstacle이 전부 False)는 그
-        사실을 note로 알려준다."""
+        모두 호출해서 full_side/selective_side를 갱신한다. 각 패널은 지금
+        자기가 따라가는 경로(full_side.paths / selective_side.paths)를
+        기준으로 재계획한다 — 처음 경로를 넘기면 두 번째 장애물부터 로봇이
+        처음 경로상의 위치로 순간이동한다. 아무 로봇도 영향받지 않은 경우
+        (PBS.path_hits_obstacle이 전부 False)는 패널마다 note로 알려준다."""
         ...
 
     def total_path_len(self, paths: "mapf_py.PBSResult") -> int:
@@ -108,8 +127,9 @@ class App:
         ...
 
     def run(self) -> None:
-        """pygame 이벤트 루프. SPACE=시간 진행(실패 상태면 무시),
-        마우스 좌클릭=handle_click, R=_start_new_scenario, ESC/창닫기=종료."""
+        """pygame 이벤트 루프. SPACE=step_forward(실패 상태면 무시),
+        ←/Backspace=step_back, W=대기 로봇 강조 켜기/끄기, 마우스 좌클릭=
+        handle_click, R=_start_new_scenario, ESC/창닫기=종료."""
         ...
 
 def main() -> None:

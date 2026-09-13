@@ -9,7 +9,7 @@ import colorsys
 
 import pygame
 
-CELL_SIZE = 24
+CELL_SIZE = 18
 STATS_HEIGHT = 70
 HEADER_HEIGHT = 30
 MARGIN = 12
@@ -28,6 +28,8 @@ OK_COLOR = (30, 140, 30)
 FAIL_COLOR = (200, 30, 30)
 TEXT_COLOR = (20, 20, 20)
 DIVIDER_COLOR = (150, 150, 155)
+# 이번 스텝에 제자리에서 기다리는(양보 중인) 로봇 표시 색.
+WAIT_COLOR = (235, 140, 0)
 
 
 def agent_colors(num_agents: int) -> list:
@@ -102,6 +104,15 @@ def draw_robot(surface, layout: PanelLayout, panel_index: int, cell, color) -> N
     pygame.draw.circle(surface, (20, 20, 20), (cx, cy), CELL_SIZE // 2 - 2, width=1)
 
 
+def draw_wait_marker(surface, layout: PanelLayout, panel_index: int, cell) -> None:
+    """이번 스텝에 제자리에서 기다리는(양보 중인) 로봇을 표시한다. 로봇 색은
+    HSV로 골고루 퍼져 있어 비슷한 주황 계열이 섞일 수 있으므로, 색만이 아니라
+    모양으로도 구분되게 원(로봇) 바깥 칸 둘레에 굵은 사각 테두리를 그린다."""
+    px, py = layout.cell_to_pixel(panel_index, cell.x, cell.y)
+    rect = pygame.Rect(px, py, CELL_SIZE, CELL_SIZE)
+    pygame.draw.rect(surface, WAIT_COLOR, rect, width=3, border_radius=4)
+
+
 def draw_obstacles(surface, layout: PanelLayout, panel_index: int, obstacles: list) -> None:
     for cell in obstacles:
         cx, cy = layout.cell_center(panel_index, cell.x, cell.y)
@@ -152,9 +163,11 @@ def draw_stats(
 
 
 def draw_divider(surface, layout: PanelLayout) -> None:
+    # 패널 높이까지만 그린다 — 창 맨 아래 상태 바는 좌우 패널 공용 한 줄이라,
+    # 구분선이 거기까지 내려오면 긴 안내 문구가 선에 가려진다.
     divider = 4
     x = layout.panel_w
-    pygame.draw.rect(surface, DIVIDER_COLOR, pygame.Rect(x, 0, divider, layout.window_size()[1]))
+    pygame.draw.rect(surface, DIVIDER_COLOR, pygame.Rect(x, 0, divider, layout.panel_h))
 
 
 def make_app_icon(size: int = 32) -> "pygame.Surface":
