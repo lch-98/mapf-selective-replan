@@ -40,6 +40,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <random>
 #include <sstream>
 #include <string>
@@ -62,6 +63,15 @@ struct ScenarioResult {
     double selective_replan_ms{0.0};
     int escalation_tier{0};  // selective_replan_ok일 때만 의미 있음
     int plan_attempts{1};    // 이 trial을 채우기 위해 plan()을 몇 번 시도했는지
+
+    // 경로 품질(12장). 방법이 실패했으면 -1.
+    int initial_soc{-1};               // 초기 계획의 경로 비용 합(도착 시각의 합)
+    int full_replan_soc{-1};           // 전체 재계획 결과의 경로 비용 합
+    int full_replan_changed{-1};       // current_time 이후 움직임이 초기 경로와 달라진 로봇 수
+    int selective_replan_soc{-1};
+    int selective_replan_changed{-1};
+    int selective_replanned{-1};       // 실제로 다시 탐색된 로봇 수(replanned_ids 크기)
+    int selective_conflicts{-1};       // 결과 경로의 충돌 수 — 항상 0이어야 한다(검증용)
 };
 
 // 맵의 빈 칸(벽이 아닌 칸) 전부를 모은다.
@@ -100,6 +110,68 @@ Cell position_at(const Path& path, int t) {
     int index = std::max(0, t - path.front().t);
     if (static_cast<size_t>(index) >= path.size()) return Cell{path.back().x, path.back().y};
     return Cell{path[static_cast<size_t>(index)].x, path[static_cast<size_t>(index)].y};
+}
+
+// 로봇의 도착 시각: 마지막으로 목적지에 들어온 시각. 경로 끝에 목적지에서 기다리는
+// 칸이 붙어 있어도(이미 도착한 로봇의 경로를 이어붙이면 생긴다) 늘어나지 않게,
+// 끝에서부터 목적지에 계속 머문 구간을 건너뛰고 센다. 이 값을 모든 로봇에 대해 더한
+// 것이 MAPF에서 흔히 쓰는 경로 비용 합(sum of costs)이다.
+int arrival_time(const Path& path) {
+    size_t i = path.size() - 1;
+    while (i > 0 && path[i - 1].x == path.back().x && path[i - 1].y == path.back().y) --i;
+    return path[i].t;
+}
+
+int sum_of_costs(const PBSResult& paths) {
+    int sum = 0;
+    for (const auto& [id, path] : paths) sum += arrival_time(path);
+    return sum;
+}
+
+// current_time 이후의 움직임이 before와 달라진 로봇 수. 경로 벡터를 그대로 비교하면
+// 이어붙이기로 시각만 채워진 경우(위치는 같음)도 "바뀜"으로 잡히므로, 시각별 위치를
+// 비교한다. 다시 탐색했지만 같은 경로가 나온 로봇은 바뀌지 않은 것으로 센다.
+int count_changed(const PBSResult& before, const PBSResult& after, int current_time) {
+    int changed = 0;
+    for (const auto& [id, old_path] : before) {
+        const Path& new_path = after.at(id);
+        int until = std::max(old_path.back().t, new_path.back().t);
+        for (int t = current_time; t <= until; ++t) {
+            if (!(position_at(old_path, t) == position_at(new_path, t))) {
+                ++changed;
+                break;
+            }
+        }
+    }
+    return changed;
+}
+
+// 결과 경로의 충돌(같은 시각 같은 칸 / 자리 맞바꾸기) 수. 결과는 register_path를
+// 통과했으므로 항상 0이어야 한다 — 등록 순서(--order)를 바꿔도 안전한지 전수 검사한다.
+int count_conflicts(const PBSResult& paths) {
+    std::vector<const Path*> list;
+    int horizon = 0;
+    for (const auto& [id, path] : paths) {
+        list.push_back(&path);
+        horizon = std::max(horizon, path.back().t);
+    }
+    int conflicts = 0;
+    for (int t = 0; t <= horizon; ++t) {
+        std::map<std::pair<int, int>, size_t> who_at;  // t 시각의 칸 → 로봇 번호
+        for (size_t i = 0; i < list.size(); ++i) {
+            Cell c = position_at(*list[i], t);
+            if (!who_at.emplace(std::make_pair(c.x, c.y), i).second) ++conflicts;
+        }
+        for (size_t i = 0; i < list.size(); ++i) {
+            Cell a = position_at(*list[i], t);
+            Cell b = position_at(*list[i], t + 1);
+            if (a == b) continue;
+            auto it = who_at.find(std::make_pair(b.x, b.y));
+            if (it == who_at.end() || it->second <= i) continue;  // 한 쌍을 한 번만 센다
+            if (position_at(*list[it->second], t + 1) == a) ++conflicts;
+        }
+    }
+    return conflicts;
 }
 
 // t 시점에 어느 로봇이든 cell 위에 서 있는가?
@@ -321,6 +393,9 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
                                  int current_time, const PBSConfig& replan_config) {
     ScenarioResult result;
     result.plan_ok = true;
+    result.initial_soc = sum_of_costs(initial);
+
+    // 경로 품질은 타이머 밖에서 계산한다(실행 시간에 섞이지 않게).
 
     // 방법 A: 전체 재계획 (현재 위치 기준).
     {
@@ -329,6 +404,10 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
         std::optional<PBSResult> full = pbs_a.full_replan(agents, initial, obstacles, current_time);
         result.full_replan_ms = elapsed_ms(t0);
         result.full_replan_ok = full.has_value();
+        if (full.has_value()) {
+            result.full_replan_soc = sum_of_costs(*full);
+            result.full_replan_changed = count_changed(initial, *full, current_time);
+        }
     }
 
     // 방법 B: 선택적 재계획(Tier 0/1/안전망).
@@ -338,7 +417,13 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
         std::optional<ReplanResult> selective = pbs_b.replan(agents, initial, obstacles, current_time);
         result.selective_replan_ms = elapsed_ms(t0);
         result.selective_replan_ok = selective.has_value();
-        if (selective.has_value()) result.escalation_tier = selective->escalation_tier;
+        if (selective.has_value()) {
+            result.escalation_tier = selective->escalation_tier;
+            result.selective_replan_soc = sum_of_costs(selective->paths);
+            result.selective_replan_changed = count_changed(initial, selective->paths, current_time);
+            result.selective_replanned = static_cast<int>(selective->replanned_ids.size());
+            result.selective_conflicts = count_conflicts(selective->paths);
+        }
     }
 
     return result;
@@ -435,7 +520,10 @@ std::string run_task(const Task& task) {
     out << task.map_name << "," << task.num_agents << "," << task.trial << ","
         << r.plan_attempts << "," << (r.plan_ok ? 1 : 0) << "," << (r.full_replan_ok ? 1 : 0)
         << "," << r.full_replan_ms << "," << (r.selective_replan_ok ? 1 : 0) << ","
-        << r.selective_replan_ms << "," << r.escalation_tier << "\n";
+        << r.selective_replan_ms << "," << r.escalation_tier << "," << r.initial_soc << ","
+        << r.full_replan_soc << "," << r.full_replan_changed << "," << r.selective_replan_soc << ","
+        << r.selective_replan_changed << "," << r.selective_replanned << "," << r.selective_conflicts
+        << "\n";
     return out.str();
 }
 
@@ -452,6 +540,12 @@ int main(int argc, char** argv) {
     // --tiers K  : 선택적 재계획이 "막은 로봇"을 몇 단계까지 추적할지
     //              (PBSConfig::max_escalation_tiers, 기본 1). 시나리오 생성은
     //              이 값과 무관하므로 K만 바꿔 돌리면 같은 시나리오에서 비교된다.
+    // --order O  : 선택적 재계획의 등록 순서(PBSConfig::order, 12장).
+    //              priority(기본, 원래 방식) | fixed-first(고정 로봇 먼저 + 구조 로봇은 뒤에).
+    //              --tiers와 마찬가지로 시나리오 생성과 무관하다.
+    // --reachability : 도달성 검사를 켠다(PBSConfig::check_reachability, 13장).
+    // --rescue R : 구조 로봇 고르는 방법(PBSConfig::rescue_selection, 13장).
+    //              blocked(기본, 막혀 본 모든 칸의 주인) | path(최단 경로와 부딪히는 로봇만).
     bool large = false;
     int repeats = 50;
     PBSConfig replan_config;
@@ -463,8 +557,31 @@ int main(int argc, char** argv) {
             repeats = std::atoi(argv[++i]);
         } else if (arg == "--tiers" && i + 1 < argc) {
             replan_config.max_escalation_tiers = std::atoi(argv[++i]);
+        } else if (arg == "--order" && i + 1 < argc) {
+            std::string value = argv[++i];
+            if (value == "priority") {
+                replan_config.order = ReplanOrder::kPriority;
+            } else if (value == "fixed-first") {
+                replan_config.order = ReplanOrder::kFixedFirst;
+            } else {
+                std::cerr << "--order must be priority or fixed-first\n";
+                return 1;
+            }
+        } else if (arg == "--reachability") {
+            replan_config.check_reachability = true;
+        } else if (arg == "--rescue" && i + 1 < argc) {
+            std::string value = argv[++i];
+            if (value == "blocked") {
+                replan_config.rescue_selection = RescueSelection::kBlockedCells;
+            } else if (value == "path") {
+                replan_config.rescue_selection = RescueSelection::kShortestPathConflicts;
+            } else {
+                std::cerr << "--rescue must be blocked or path\n";
+                return 1;
+            }
         } else {
-            std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K]\n";
+            std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K] "
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path]\n";
             return 1;
         }
     }
@@ -534,7 +651,9 @@ int main(int argc, char** argv) {
     for (std::thread& t : workers) t.join();
 
     std::cout << "map,num_agents,trial,plan_attempts,plan_ok,full_replan_ok,full_replan_ms,"
-                 "selective_replan_ok,selective_replan_ms,escalation_tier\n";
+                 "selective_replan_ok,selective_replan_ms,escalation_tier,initial_soc,"
+                 "full_replan_soc,full_replan_changed,selective_replan_soc,"
+                 "selective_replan_changed,selective_replanned,selective_conflicts\n";
     for (const std::string& line : results) std::cout << line;
 
     return 0;

@@ -142,6 +142,9 @@ Windows(멀티 컨피그 MSBuild)와 Linux(단일 컨피그 Makefile/Ninja) 모�
 | `--large` | 꺼짐 | 규모 확장 실험: 64x64 맵, 로봇 50/100/150/200대 (장애물은 그대로 1~3칸) |
 | `--repeats N` | 50 | 맵 x 로봇 수 조합마다 반복 횟수 |
 | `--tiers K` | 1 | 선택적 재계획이 "막은 로봇"을 몇 단계까지 추적할지(`PBSConfig::max_escalation_tiers`). 시나리오 생성과 무관해서 K만 바꿔 돌리면 같은 시나리오에서 비교된다 |
+| `--order O` | priority | 선택적 재계획의 등록 순서(`PBSConfig::order`, [12장](docs/12_fixed_first_replan.md)). `priority`=원래 방식(agents 순서로 섞어 처리), `fixed-first`=고정 로봇 먼저 등록 + 구조 로봇은 막힌 로봇 뒤에. 시나리오 생성과 무관 |
+| `--reachability` | 꺼짐 | 도달성 검사(`PBSConfig::check_reachability`, [13장](docs/13_reachability_and_rescue.md)). 다른 로봇이 없어도 목적지에 못 가는 로봇이 있으면 바로 실패 |
+| `--rescue R` | blocked | 구조 로봇 고르는 방법(`PBSConfig::rescue_selection`, 13장). `blocked`=A*가 막혀 본 모든 칸의 주인, `path`=다른 로봇이 없을 때의 최단 경로와 부딪히는 로봇만 |
 
 실행 결과는 표준 출력(stdout)으로 CSV가 그대로 흘러나오는
 구조라, 아래처럼 셸 리다이렉션(`>`)으로 파일에 받아써야 한다 — `>` 뒤의

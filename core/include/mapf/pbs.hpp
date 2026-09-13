@@ -23,11 +23,49 @@ namespace mapf {
 // 로봇id → 경로.
 using PBSResult = std::unordered_map<int, Path>;
 
+// replan()의 한 번의 시도(try_replan_set)에서 로봇을 어떤 순서로 등록할지(12장).
+enum class ReplanOrder {
+    // agents 순서대로, 고정 로봇(옛 경로 등록)과 재계획 로봇(A*)을 섞어서 처리한다
+    // (원래 방식). 앞 순서 재계획 로봇은 뒤 순서 고정 로봇의 옛 경로를 모른 채
+    // 계획하므로, 고정 로봇의 등록이 거절될 수 있다(10장 10.5절 문제 1).
+    kPriority,
+    // 고정 로봇의 옛 경로를 먼저 전부 등록하고, 재계획 로봇은 working_ids 순서
+    // (처음 영향받은 로봇 → 구조 로봇, 불려 온 순서)로 계획한다. 고정 로봇의 등록
+    // 거절이 원리상 없고, 구조 로봇은 항상 자기가 막은 로봇보다 뒤에 계획된다
+    // (11장 11.6절 아이디어 1). 대신 재계획 로봇은 자기보다 우선순위가 낮은 고정
+    // 로봇까지 피해야 한다.
+    kFixedFirst,
+};
+
+// 재계획 로봇의 A*가 실패했을 때, 누구를 구조 로봇으로 불러올지 고르는 방법(13장).
+enum class RescueSelection {
+    // A*가 탐색하다가 한 번이라도 막힌 모든 칸의 주인(원래 방식). A*는 실패하기까지
+    // 갈 수 있는 곳을 전부 뒤지므로, 경로와 상관없는 먼 로봇까지 끌려올 수 있다.
+    kBlockedCells,
+    // "다른 로봇이 없을 때의 최단 경로"(지도의 벽 + 새 장애물만 보고 BFS)를 쉬지 않고
+    // 따라간다고 보고, 그 경로와 실제로 부딪히는 로봇만 고른다(칸 충돌, 자리 맞바꾸기,
+    // 도착 후 목적지 머묾). 그중 새로 불러올 로봇이 없으면 kBlockedCells로 돌아간다.
+    kShortestPathConflicts,
+};
+
 // PBS::replan의 동작을 조정하는 설정.
 struct PBSConfig {
     // Tier 1 이후, "막은 원인 로봇"을 몇 단계까지 추적해서 working_ids를
     // 넓혀볼지(06장 6.6절). 0이면 Tier 0만 시도하고 바로 안전망으로 간다.
     int max_escalation_tiers{1};
+
+    // 한 번의 시도에서 로봇을 등록하는 순서. 안전망(full_replan)은 이 값과
+    // 무관하게 항상 agents 순서다.
+    ReplanOrder order{ReplanOrder::kPriority};
+
+    // true면 replan()을 시작할 때, 영향받은 로봇마다 "다른 로봇이 하나도 없어도 목적지에
+    // 갈 수 있는가"(벽 + 새 장애물만 보고 BFS, max_timestep 안에 도착 가능한가)를 확인한다.
+    // 한 대라도 못 가면 Tier와 안전망을 건너뛰고 바로 실패(nullopt)한다(13장). 이때는 전체
+    // 재계획도 반드시 실패하므로 결과는 같고, 헛된 탐색 시간만 아낀다.
+    bool check_reachability{false};
+
+    // A*가 실패했을 때 구조 로봇을 고르는 방법(13장).
+    RescueSelection rescue_selection{RescueSelection::kBlockedCells};
 };
 
 // replan() 한 번의 결과 — 최종 경로 외에, "얼마나 선택적으로 풀렸는지"를
@@ -53,8 +91,9 @@ public:
     std::optional<PBSResult> plan(const std::vector<Agent>& agents);
 
     // 이미 진행 중인 계획(previous_paths)에 new_obstacles가 새로 생겼을 때,
-    // 영향받은 로봇만 선택적으로 다시 계획한다(06장). agents 순서가 곧
-    // 우선순위라는 규칙은 plan()과 동일하게 유지된다.
+    // 영향받은 로봇만 선택적으로 다시 계획한다(06장). 기본(ReplanOrder::kPriority)
+    // 에서는 agents 순서가 곧 우선순위라는 plan()의 규칙이 그대로 유지되고,
+    // kFixedFirst에서는 "고정 로봇 → 처음 영향받은 로봇 → 구조 로봇" 순서가 된다.
     //
     // Tier 0(영향받은 로봇만) → Tier 1..max_escalation_tiers(막은 원인 로봇을
     // 추적해서 확장) → 안전망(전체 재계획, 현재 위치 기준)을 순서대로 시도한다.
@@ -112,10 +151,10 @@ private:
     // Tier 1의 get_owner 추적에서 "구조 로봇 후보"로 잘못 잡히지 않는다.
     void reserve_new_obstacles(const std::vector<Cell>& new_obstacles, int current_time);
 
-    // working_ids에 속한 로봇만 agents 순서대로(=우선순위 순으로) current_time
-    // 시점의 위치에서 원래 목적지까지 다시 탐색한다. working_ids에 없는 로봇은
-    // previous_paths의 기존 경로를 그대로 장벽으로 등록한다(06장 6.4절 2단계,
-    // 6.6.1절 "구조 로봇의 과거 경로를 장벽으로 쓰면 안 된다").
+    // working_ids에 속한 로봇만 current_time 시점의 위치에서 원래 목적지까지 다시
+    // 탐색한다. working_ids에 없는 로봇은 previous_paths의 기존 경로를 그대로
+    // 장벽으로 등록한다(06장 6.4절 2단계, 6.6.1절 "구조 로봇의 과거 경로를 장벽으로
+    // 쓰면 안 된다"). 처리 순서는 replan_config_.order가 정한다(ReplanOrder 참고).
     //
     // 성공하면 새 PBSResult를 반환한다(영향 안 받은 로봇=기존 경로, working_ids
     // 로봇=새로 찾은 경로를 과거 구간과 이어붙인 것). 실패하면 nullopt를 반환하고,
@@ -137,6 +176,15 @@ private:
                                              int current_time,
                                              std::vector<SpaceTimeCell>* out_blocked,
                                              std::optional<int>* out_blocked_owner);
+
+    // RescueSelection::kShortestPathConflicts가 쓰는 "구조 후보 칸" 목록. from에서 goal까지
+    // 다른 로봇을 무시한 최단 경로를 current_time부터 쉬지 않고 따라간다고 볼 때, 지금
+    // 테이블(table_)의 예약과 부딪히는 (칸, 시각)들을 돌려준다 — 칸 충돌은 그 칸, 자리
+    // 맞바꾸기는 상대 로봇이 그 시각에 서 있는 칸, 도착 후 머묾은 목적지 칸. 호출하는 쪽이
+    // get_owner로 주인을 찾는다. 최단 경로가 없으면 빈 목록.
+    std::vector<SpaceTimeCell> shortest_path_conflicts(Cell from, Cell goal,
+                                                        const std::vector<Cell>& new_obstacles,
+                                                        int current_time) const;
 
     const Map& map_;
     AStarConfig config_;

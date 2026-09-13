@@ -6,6 +6,7 @@
 #include "mapf/pbs.hpp"
 
 #include <algorithm>
+#include <queue>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -34,6 +35,47 @@ Path splice_paths(const Path& old_path, const Path& new_future, int current_time
         full_path.push_back(cell);
     }
     return full_path;
+}
+
+// 다른 로봇을 전혀 무시하고, 지도의 벽과 blocked 칸(새 장애물)만 피해서 from → to 최단
+// 경로를 BFS로 찾는다(13장). 반환값은 from부터 to까지의 칸 목록이고, 못 가면 빈 목록이다.
+// 시간 개념이 없는 평범한 BFS라 대기는 필요 없다. 이웃을 늘 같은 순서로 보므로 같은
+// 입력에는 항상 같은 경로가 나온다.
+std::vector<Cell> static_shortest_path(const Map& map, Cell from, Cell to,
+                                       const std::vector<Cell>& blocked) {
+    auto is_blocked = [&blocked](Cell c) {
+        return std::find(blocked.begin(), blocked.end(), c) != blocked.end();
+    };
+    if (is_blocked(to)) return {};
+
+    const int width = map.width();
+    auto index = [width](Cell c) { return static_cast<size_t>(c.y * width + c.x); };
+    constexpr int kUnvisited = -2;
+    constexpr int kStart = -1;
+    std::vector<int> parent(static_cast<size_t>(width * map.height()), kUnvisited);
+
+    std::queue<Cell> frontier;
+    parent[index(from)] = kStart;
+    frontier.push(from);
+    while (!frontier.empty()) {
+        Cell current = frontier.front();
+        frontier.pop();
+        if (current == to) break;
+        for (const Cell& next : map.neighbors(current)) {
+            if (next == current) continue;  // 대기 동작은 BFS에 필요 없다
+            if (parent[index(next)] != kUnvisited || is_blocked(next)) continue;
+            parent[index(next)] = static_cast<int>(index(current));
+            frontier.push(next);
+        }
+    }
+    if (parent[index(to)] == kUnvisited) return {};
+
+    std::vector<Cell> route;
+    for (int i = static_cast<int>(index(to)); i != kStart; i = parent[static_cast<size_t>(i)]) {
+        route.push_back(Cell{i % width, i / width});
+    }
+    std::reverse(route.begin(), route.end());
+    return route;
 }
 
 }  // namespace
@@ -175,9 +217,37 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
 
     PBSResult result;
 
-    for (const Agent& agent : agents) {
-        bool is_working = std::find(working_ids.begin(), working_ids.end(), agent.id) !=
-                           working_ids.end();
+    auto in_working = [&working_ids](int id) {
+        return std::find(working_ids.begin(), working_ids.end(), id) != working_ids.end();
+    };
+
+    // 처리 순서를 정한다(12장). 아래 반복문의 내용은 두 방식이 똑같고, 순서만 다르다.
+    std::vector<const Agent*> order;
+    if (replan_config_.order == ReplanOrder::kFixedFirst) {
+        // 1) 고정 로봇의 옛 경로를 먼저 전부 등록한다. 이 경로들은 이전 계획에서 서로
+        //    충돌이 없었고 새 장애물과도 겹치지 않으므로(겹쳤다면 working이다) 거절되지
+        //    않는다. 그래서 재계획 로봇은 이들을 모두 알고 피해서 경로를 찾는다.
+        for (const Agent& agent : agents) {
+            if (!in_working(agent.id)) order.push_back(&agent);
+        }
+        // 2) 재계획 로봇은 working_ids 순서 = 처음 영향받은 로봇(agents 순서) → 구조
+        //    로봇(불려 온 순서). 구조 로봇은 자기가 막은 로봇이 이미 working_ids에 있을 때
+        //    불려 오므로, 항상 그 로봇보다 뒤에 계획되어 그 로봇의 새 경로를 보고 피한다.
+        for (int id : working_ids) {
+            for (const Agent& agent : agents) {
+                if (agent.id == id) {
+                    order.push_back(&agent);
+                    break;
+                }
+            }
+        }
+    } else {
+        for (const Agent& agent : agents) order.push_back(&agent);
+    }
+
+    for (const Agent* agent_ptr : order) {
+        const Agent& agent = *agent_ptr;
+        bool is_working = in_working(agent.id);
 
         if (!is_working) {
             // working_ids에 없는 로봇: 기존 경로를 그대로 믿고 장벽으로 등록한다.(06장 6.4절 2단계)
@@ -191,6 +261,10 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
             // 로봇이라 get_owner로 추적해도 새 후보를 못 찾는다 — 추적해야
             // 할 것은 "거절 당한 로봇(agent.id) 자신"이다. 그래서 out_blocked
             // 대신 out_blocked_owner로 agent.id를 직접 알려준다.
+            //
+            // (ReplanOrder::kFixedFirst에서는 고정 로봇이 재계획 로봇보다 먼저 등록되므로
+            // 이 거절이 원리상 생기지 않는다. previous_paths끼리 이미 충돌하는 잘못된
+            // 입력일 때만 생기며, 그때도 같은 방식으로 그 로봇을 불러온다.)
             const Path& old_path = previous_paths.at(agent.id);
             if (!register_path(agent.id, old_path)) {
                 if (out_blocked_owner != nullptr) *out_blocked_owner = agent.id;
@@ -214,7 +288,25 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
         AStarResult astar_result = astar.search_with_diagnostics(here, agent.goal, current_time);
 
         if (!astar_result.path.has_value()) {
-            if (out_blocked != nullptr) *out_blocked = astar_result.blocked_attempts;
+            if (out_blocked != nullptr) {
+                *out_blocked = astar_result.blocked_attempts;
+                // 13장: "막혀 본 모든 칸" 대신 "최단 경로와 부딪히는 칸"만 넘긴다. 단, 그중
+                // 새로 불러올 수 있는(아직 재계획 중이 아닌) 로봇이 한 대도 없으면 원래
+                // 방식 그대로 둔다 — 그렇지 않으면 Tier가 아무도 못 불러오고 끝나 버린다.
+                if (replan_config_.rescue_selection == RescueSelection::kShortestPathConflicts) {
+                    std::vector<SpaceTimeCell> conflicts =
+                        shortest_path_conflicts(here, agent.goal, new_obstacles, current_time);
+                    bool has_new_candidate = false;
+                    for (const SpaceTimeCell& cell : conflicts) {
+                        std::optional<int> owner = table_.get_owner(cell.x, cell.y, cell.t);
+                        if (owner.has_value() && *owner != -1 && !in_working(*owner)) {
+                            has_new_candidate = true;
+                            break;
+                        }
+                    }
+                    if (has_new_candidate) *out_blocked = std::move(conflicts);
+                }
+            }
             return std::nullopt;
         }
 
@@ -226,6 +318,40 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
     }
 
     return result;
+}
+
+std::vector<SpaceTimeCell> PBS::shortest_path_conflicts(Cell from, Cell goal,
+                                                         const std::vector<Cell>& new_obstacles,
+                                                         int current_time) const {
+    std::vector<SpaceTimeCell> conflicts;
+    std::vector<Cell> route = static_shortest_path(map_, from, goal, new_obstacles);
+    if (route.empty()) return conflicts;
+
+    // route[i]에는 current_time + i에 있다고 본다(쉬지 않고 가는 가장 빠른 일정).
+    for (size_t i = 0; i < route.size(); ++i) {
+        int t = current_time + static_cast<int>(i);
+        if (t > config_.max_timestep) break;
+        const Cell& here = route[i];
+        // 칸 충돌. 출발 칸(i=0)은 지금 서 있는 칸이라 검사하지 않는다(A*와 같은 규칙).
+        if (i > 0 && table_.is_occupied(here.x, here.y, t)) {
+            conflicts.push_back(SpaceTimeCell{here.x, here.y, t});
+        }
+        // 자리 맞바꾸기: here→next로 가는 t→t+1에 누가 next→here로 온다. 그 로봇은
+        // t 시각에 next에 서 있으므로, 그 칸의 주인이 곧 상대 로봇이다.
+        if (i + 1 < route.size()) {
+            const Cell& next = route[i + 1];
+            if (table_.is_edge_occupied(here.x, here.y, next.x, next.y, t)) {
+                conflicts.push_back(SpaceTimeCell{next.x, next.y, t});
+            }
+        }
+    }
+
+    // 도착 후 머묾: 도착한 뒤 목적지를 차지하는 로봇이 있으면 끝까지 머물 수 없다.
+    int arrival = current_time + static_cast<int>(route.size()) - 1;
+    for (int t = arrival; t <= config_.max_timestep; ++t) {
+        if (table_.is_occupied(goal.x, goal.y, t)) conflicts.push_back(SpaceTimeCell{goal.x, goal.y, t});
+    }
+    return conflicts;
 }
 
 std::optional<PBSResult> PBS::full_replan(const std::vector<Agent>& agents,
@@ -264,6 +390,20 @@ std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
         const Path& old_path = previous_paths.at(agent.id);
         if (path_hits_obstacle(old_path, new_obstacles, current_time)) {
             working_ids.push_back(agent.id);
+
+            // 도달성 검사(13장): 다른 로봇이 하나도 없어도 이 로봇이 목적지에 못 간다면
+            // (새 장애물이 길을 끊었거나, 가장 빨라도 max_timestep 안에 못 도착한다면)
+            // 어떤 로봇을 불러와도, 전체 재계획을 해도 이 로봇의 A*는 반드시 실패한다.
+            // 그러니 Tier와 안전망을 헛돌지 않고 바로 실패를 알린다. 구조 로봇은 검사할
+            // 필요가 없다 — 옛 경로가 새 장애물을 안 밟으므로 그 자체가 갈 수 있다는 증거다.
+            if (replan_config_.check_reachability) {
+                Cell here = position_at(old_path, current_time);
+                std::vector<Cell> route =
+                    static_shortest_path(map_, here, agent.goal, new_obstacles);
+                if (route.empty()) return std::nullopt;
+                int earliest_arrival = current_time + static_cast<int>(route.size()) - 1;
+                if (earliest_arrival > config_.max_timestep) return std::nullopt;
+            }
         }
     }
 

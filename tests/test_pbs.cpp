@@ -615,3 +615,208 @@ TEST(PBSReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
     ASSERT_TRUE(full.has_value());
     expect_conflict_free(*full);
 }
+
+// ───────────────────────────────────────────────────────────────
+// 12장 — ReplanOrder::kFixedFirst (고정 로봇 먼저 등록 + 구조 로봇은 뒤에)
+// ───────────────────────────────────────────────────────────────
+
+TEST(PBSReplanTest, FixedFirstKeepsUnchangedAgentAndDetoursWorkingAgentAtTier0) {
+    // Tier1RescuesBlockingAgentWhenAloneDetourImpossible과 같은 시나리오(4x3 격자)를
+    // kFixedFirst로 푼다. 원래 방식에서는 R(1순위)이 K를 모른 채 (1,1)을 t=2에 지나가서
+    // K(2순위)의 등록이 거절되고 Tier 1로 K를 비키게 했다.
+    //
+    // kFixedFirst에서는 K의 옛 경로((1,1)을 t=2에 지나감)가 먼저 등록되므로, R의 A*가
+    // 처음부터 K를 피해 간다: (0,1)에서 한 스텝 기다렸다가 t=3에 (1,1)을 지나간다.
+    // 그래서 Tier 0에서 끝나고 K의 경로는 그대로다. 대신 R은 t=5가 아니라 t=6에
+    // 도착한다 — 우선순위가 높은 R이 낮은 K를 피해 가는 대가(11장 11.6절).
+    Map map(4, 3);
+    PBSConfig replan_config;
+    replan_config.order = ReplanOrder::kFixedFirst;
+    PBS pbs(map, AStarConfig{}, replan_config);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 0}, Cell{3, 0}},  // R
+        Agent{1, Cell{1, 2}, Cell{1, 2}},  // K
+    };
+
+    PBSResult previous_paths;
+    previous_paths[0] = Path{
+        SpaceTimeCell{0, 0, 0},
+        SpaceTimeCell{1, 0, 1},
+        SpaceTimeCell{2, 0, 2},
+        SpaceTimeCell{3, 0, 3},
+    };
+    previous_paths[1] = Path{
+        SpaceTimeCell{1, 2, 0},
+        SpaceTimeCell{1, 2, 1},
+        SpaceTimeCell{1, 1, 2},
+        SpaceTimeCell{1, 2, 3},
+    };
+
+    auto result = pbs.replan(agents, previous_paths, {Cell{1, 0}, Cell{2, 0}},
+                              /*current_time=*/0);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 0);
+    EXPECT_TRUE(result->rescued_ids.empty());
+    EXPECT_EQ(result->paths.at(1), previous_paths.at(1));  // K는 안 바뀐다
+    EXPECT_EQ(result->paths.at(0).back(), (SpaceTimeCell{3, 0, 6}));
+    expect_conflict_free(result->paths);
+}
+
+TEST(PBSReplanTest, FixedFirstPlansRescuedAgentAfterTheAgentItBlocked) {
+    // NonWorkingAgentTailRejectionEscalatesToTier1과 같은 맵이지만 우선순위를 뒤집었다:
+    //   y=0:  # # # # . # #     ← (4,0)은 K가 비켜설 수 있는 막다른 칸
+    //   y=1:  # # # . . . #
+    //   y=2:  . . . . . . .
+    // 로봇0(K, 1순위): (4,1)->(4,1) 제자리. 장애물과 무관한 고정 로봇.
+    // 로봇1(W, 2순위): (0,2)->(6,2) 아래 행 직선. t=3에 (4,2)에 장애물이 생긴다.
+    //
+    // W의 유일한 우회로는 가운데 행의 (4,1) — K가 영원히 머무는 칸이라 W의 A*가 실패하고
+    // (11장의 (b)), 막은 로봇 K를 구조 로봇으로 불러온다.
+    //   - kPriority: K가 W보다 앞 순서라 먼저 계획된다. W를 모르는 K는 제자리에 머무는
+    //     경로를 다시 고르고 W는 또 막힌다. 더 불러올 로봇도 없어 안전망으로 가고,
+    //     안전망도 같은 순서라 실패한다.
+    //   - kFixedFirst: K는 working_ids 순서대로 W 뒤에 계획된다. W가 t=5에 (4,1)을
+    //     지나가는 경로가 먼저 등록되고, K는 그걸 보고 (4,0)으로 비켰다가 돌아온다.
+    Map map(std::vector<std::string>{
+        "####.##",
+        "###...#",
+        ".......",
+    });
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{4, 1}, Cell{4, 1}},  // K
+        Agent{1, Cell{0, 2}, Cell{6, 2}},  // W
+    };
+
+    PBSResult previous_paths;
+    previous_paths[0] = Path{SpaceTimeCell{4, 1, 0}};
+    previous_paths[1] = Path{
+        SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
+        SpaceTimeCell{3, 2, 3}, SpaceTimeCell{4, 2, 4}, SpaceTimeCell{5, 2, 5},
+        SpaceTimeCell{6, 2, 6},
+    };
+
+    PBS priority_pbs(map);
+    EXPECT_FALSE(
+        priority_pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3).has_value());
+
+    PBSConfig replan_config;
+    replan_config.order = ReplanOrder::kFixedFirst;
+    PBS pbs(map, AStarConfig{}, replan_config);
+    auto result = pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 1);
+    EXPECT_EQ(result->rescued_ids, std::vector<int>{0});
+    expect_conflict_free(result->paths);
+    EXPECT_EQ(result->paths.at(0).back().x, 4);
+    EXPECT_EQ(result->paths.at(0).back().y, 1);
+    EXPECT_EQ(result->paths.at(1).back().x, 6);
+    EXPECT_EQ(result->paths.at(1).back().y, 2);
+}
+
+// ───────────────────────────────────────────────────────────────
+// 13장 — 도달성 검사(check_reachability) + 최단 경로 기반 구조 후보(kShortestPathConflicts)
+// ───────────────────────────────────────────────────────────────
+
+TEST(PBSReplanTest, ReachabilityCheckFailsAtOnceWhenObstacleCutsTheOnlyRoute) {
+    // 5x1 통로. 로봇0: (0,0)->(4,0). t=0에 (2,0)에 장애물이 생기면 목적지로 가는 길이
+    // 완전히 끊긴다. 도달성 검사를 켜면 Tier·안전망을 건너뛰고 바로 실패해야 한다.
+    // 결과는 검사를 끈 경우(안전망까지 갔다가 실패)와 같아야 한다 — 전체 재계획도
+    // 반드시 실패하는 경우만 일찍 끝내는 것이기 때문이다.
+    Map map(5, 1);
+    std::vector<Agent> agents = {Agent{0, Cell{0, 0}, Cell{4, 0}}};
+    PBS planner(map);
+    auto initial = planner.plan(agents);
+    ASSERT_TRUE(initial.has_value());
+
+    PBSConfig with_check;
+    with_check.check_reachability = true;
+    PBS checked(map, AStarConfig{}, with_check);
+    EXPECT_FALSE(checked.replan(agents, *initial, {Cell{2, 0}}, /*current_time=*/0).has_value());
+    EXPECT_FALSE(planner.replan(agents, *initial, {Cell{2, 0}}, /*current_time=*/0).has_value());
+    EXPECT_FALSE(planner.full_replan(agents, *initial, {Cell{2, 0}}, /*current_time=*/0).has_value());
+}
+
+TEST(PBSReplanTest, ReachabilityCheckCountsTheTimeLimit) {
+    // 3x3 빈 격자. 로봇0: (0,1)->(2,1) 직선(t=2 도착). t=0에 (1,1)에 장애물이 생기면
+    // 위나 아래로 돌아가야 해서 가장 빨라도 t=4에 도착한다.
+    // max_timestep=3이면 칸으로는 이어져 있어도 시간 안에 못 가므로 실패여야 한다.
+    Map map(3, 3);
+    std::vector<Agent> agents = {Agent{0, Cell{0, 1}, Cell{2, 1}}};
+    AStarConfig short_horizon;
+    short_horizon.max_timestep = 3;
+    PBSConfig with_check;
+    with_check.check_reachability = true;
+
+    PBS tight(map, short_horizon, with_check);
+    auto tight_initial = tight.plan(agents);
+    ASSERT_TRUE(tight_initial.has_value());
+    EXPECT_FALSE(tight.replan(agents, *tight_initial, {Cell{1, 1}}, /*current_time=*/0).has_value());
+    EXPECT_FALSE(tight.full_replan(agents, *tight_initial, {Cell{1, 1}}, /*current_time=*/0).has_value());
+
+    // 시간이 넉넉하면 같은 상황에서 성공해야 한다 — 검사가 풀 수 있는 경우를 막지 않는다.
+    PBS roomy(map, AStarConfig{}, with_check);
+    auto roomy_initial = roomy.plan(agents);
+    ASSERT_TRUE(roomy_initial.has_value());
+    auto result = roomy.replan(agents, *roomy_initial, {Cell{1, 1}}, /*current_time=*/0);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->paths.at(0).back(), (SpaceTimeCell{2, 1, 4}));
+}
+
+TEST(PBSReplanTest, ShortestPathRescueCallsOnlyAgentsOnTheRoute) {
+    //   y=0:  # # # # . # # #     ← (4,0)은 K가 비켜설 수 있는 막다른 칸
+    //   y=1:  . # # . . . # #     ← (0,1)은 Z가 머무는 막다른 칸(W의 길과 무관)
+    //   y=2:  . . . . . . . .
+    // 로봇0(K): (4,1) 제자리. 로봇1(W): (0,2)->(6,2) 아래 행 직선. 로봇2(Z): (0,1) 제자리.
+    // t=3에 (4,2)에 장애물이 생긴다(kFixedFirst).
+    //
+    // W의 A*는 (4,1)을 차지한 K 때문에 실패한다. 실패하기까지 갈 수 있는 곳을 전부 뒤지므로
+    // 왼쪽 끝 (0,2)에서 Z가 있는 (0,1)에도 막혀 본다.
+    //   - kBlockedCells(원래 방식): 막혀 본 모든 칸의 주인 → K와 Z를 둘 다 불러온다.
+    //   - kShortestPathConflicts: 다른 로봇이 없을 때의 최단 경로
+    //     (3,2)t3 (3,1)t4 (4,1)t5 (5,1)t6 (5,2)t7 (6,2)t8 와 부딪히는 로봇만 → K 하나.
+    // 둘 다 Tier 1에서 풀리지만, 새 방식은 상관없는 Z를 건드리지 않는다.
+    Map map(std::vector<std::string>{
+        "####.###",
+        ".##...##",
+        "........",
+    });
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{4, 1}, Cell{4, 1}},  // K
+        Agent{1, Cell{0, 2}, Cell{6, 2}},  // W
+        Agent{2, Cell{0, 1}, Cell{0, 1}},  // Z
+    };
+
+    PBSResult previous_paths;
+    previous_paths[0] = Path{SpaceTimeCell{4, 1, 0}};
+    previous_paths[1] = Path{
+        SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
+        SpaceTimeCell{3, 2, 3}, SpaceTimeCell{4, 2, 4}, SpaceTimeCell{5, 2, 5},
+        SpaceTimeCell{6, 2, 6},
+    };
+    previous_paths[2] = Path{SpaceTimeCell{0, 1, 0}};
+
+    PBSConfig coarse_config;
+    coarse_config.order = ReplanOrder::kFixedFirst;
+    PBS coarse_pbs(map, AStarConfig{}, coarse_config);
+    auto coarse = coarse_pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    ASSERT_TRUE(coarse.has_value());
+    EXPECT_EQ(coarse->escalation_tier, 1);
+    EXPECT_NE(std::find(coarse->rescued_ids.begin(), coarse->rescued_ids.end(), 2),
+              coarse->rescued_ids.end());  // 상관없는 Z까지 끌려온다
+    expect_conflict_free(coarse->paths);
+
+    PBSConfig precise_config = coarse_config;
+    precise_config.rescue_selection = RescueSelection::kShortestPathConflicts;
+    PBS precise_pbs(map, AStarConfig{}, precise_config);
+    auto precise = precise_pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    ASSERT_TRUE(precise.has_value());
+    EXPECT_EQ(precise->escalation_tier, 1);
+    EXPECT_EQ(precise->rescued_ids, std::vector<int>{0});  // K만
+    EXPECT_EQ(precise->paths.at(2), previous_paths.at(2));  // Z는 그대로
+    expect_conflict_free(precise->paths);
+}
