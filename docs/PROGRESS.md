@@ -542,3 +542,20 @@ A* 수정 후 32x32 벤치마크는 두 방법 모두 성공률이 거의 100%�
   200→17, 평균 시간 84→64 ms. 바뀐 11개 시나리오 중 좋아짐 6·섞임 2·나빠짐 3.
 - 도달성 검사는 결과가 완전히 같음을 확인했지만, 벤치마크에 해당 경우가 없어 시간 효과는 측정 안 됨.
 - 결과 파일: `tools/results/order_*.csv`(12장), `tools/results/idea3_*.csv`(13장).
+
+---
+
+## 이름 정리(PBS → PrioritizedPlanner) + 장애물 범위 결정 (2026-09-13)
+
+- **이름**: 순서를 탐색하지 않는 고정 우선순위 계획(PP)이라 PBS(Ma et al., 2019)라고 부르면
+  틀린 설명이 된다(10장). 그래서 `PBS` → `PrioritizedPlanner`, `PBSConfig` → `ReplanConfig`,
+  `PBSResult` → `PlanResult`, 파일 `pbs.hpp/.cpp` → `prioritized_planner.hpp/.cpp`,
+  `test_pbs.cpp` → `test_prioritized_planner.cpp`, 테스트 묶음 `PBSTest` →
+  `PrioritizedPlannerTest`, `PBSReplanTest` → `SelectiveReplanTest`로 바꿨다. 파이썬도
+  `mapf_py.PrioritizedPlanner`, `mapf_py.ReplanConfig`. **동작은 그대로**(테스트 52개,
+  파이썬 스모크 테스트 통과).
+- 옛 문서(00~09장, DESIGN.md, 이 파일의 이전 기록)의 "PBS"는 당시 기록이라 그대로 두고,
+  README·DESIGN.md·05장·10장에 이름 안내를 추가했다.
+- **장애물 범위**: 연구 대상은 **예기치 않은 장애물(Unexpected Obstacle)** — 실행 도중 나타나
+  그 자리에 머무는 장애물. 물류 현장에서 움직이는 장애물은 곧 지나가지만 멈춰 선 장애물은 길을
+  오래 막아 다른 경로를 찾게 만든다는 판단(사용자 결정). 움직이는 장애물은 이후 연구(09장).

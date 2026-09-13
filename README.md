@@ -1,6 +1,6 @@
 # Path Planning Core — 선택적 재계획(Selective Replan) 기반 MAPF
 
-물류 창고 같은 환경에서, 동적 장애물이 실행 도중 나타났을 때 다중 로봇
+물류 창고 같은 환경에서, **예기치 않은 장애물(Unexpected Obstacle)**이 실행 도중 나타났을 때 다중 로봇
 경로(MAPF, Multi-Agent Pathfinding)를 **전체 재계획(Full Replan)** 대신
 **선택적 재계획(Selective Replan) + 계층적 확장(Tiered Escalation)**으로
 더 빠르고 성공률 높게 다시 계획하는 C++ 코어와, 그 결과를 눈으로 비교할
@@ -14,6 +14,17 @@
 [`docs/PROGRESS.md`](docs/PROGRESS.md)를 참고(Windows/Ubuntu 등 환경을
 옮겨서 작업할 때도 `git pull`만으로 맥락을 이어받을 수 있도록 남겨둔 문서).
 
+> **다루는 장애물 = 예기치 않은 장애물(Unexpected Obstacle).** 계획에 없던 장애물이 실행 도중
+> 나타나 **그 자리에 계속 머무는** 경우다(예: 떨어진 물건, 멈춰 선 설비). 물류 현장에서 움직이는
+> 장애물(사람, 지게차)은 잠깐 기다리면 지나가지만, 멈춰 선 장애물은 길을 오래 막아 **다른 경로를
+> 찾아야** 하게 만든다. 움직이는(동적) 장애물은 이후 연구 대상이다
+> ([`docs/09_dynamic_obstacles_plan.md`](docs/09_dynamic_obstacles_plan.md)).
+>
+> **이름 안내.** 고수준 계획기는 **고정 우선순위 계획(Prioritized Planning, PP)**이다. 예전 코드
+> 이름은 `PBS`였지만 PBS(Ma et al., 2019)와는 다른 알고리즘이라 2026-09-13에
+> `PrioritizedPlanner`로 바꿨다(`PBSConfig` → `ReplanConfig`, `PBSResult` → `PlanResult`).
+> 옛 문서(05장 등)의 "PBS"는 이 클래스를 가리킨다.
+
 ---
 
 ## 폴더 구조
@@ -26,11 +37,11 @@ Path_Planning_Core_/
 │   │   ├── agent.hpp         Agent
 │   │   ├── reservation_table.hpp  (x,y,t) 예약 장부
 │   │   ├── space_time_astar.hpp   저수준 탐색(로봇 1대)
-│   │   └── pbs.hpp           PBS(plan/replan/full_replan) — 고수준 조정 + 재계획 전략
+│   │   └── prioritized_planner.hpp  PrioritizedPlanner(plan/replan/full_replan) — 고수준 조정(PP) + 재계획 전략
 │   └── src/                 위 헤더들의 구현
 │
 ├── bindings/                 C++ 코어를 파이썬으로 노출하는 pybind11 바인딩
-│   ├── mapf_bindings.cpp     바인딩 코드(Cell/Agent/Map/PBS 등)
+│   ├── mapf_bindings.cpp     바인딩 코드(Cell/Agent/Map/PrioritizedPlanner 등)
 │   ├── mapf_py.pyi           타입 스텁(자동완성/타입체크용, 실제 구현은 .cpp)
 │   └── CMakeLists.txt
 │
@@ -53,9 +64,11 @@ Path_Planning_Core_/
 │   └── plots/                   생성된 그래프 PNG
 │
 ├── tests/                     GoogleTest 단위 테스트
-├── docs/                      단계별 설계/구현 설명 문서(00~09) + 진행 이력
-│   ├── 00~08_*.md               단계별 설계/구현 설명(빌드 계획, Map/Agent, PBS, 벤치마크 등)
-│   ├── 09_dynamic_obstacles_plan.md  동적(움직이는) 장애물 지원 확장 설계 분석
+├── docs/                      단계별 설계/구현 설명 문서(00~14) + 진행 이력
+│   ├── 00~08_*.md               단계별 설계/구현 설명(빌드 계획, Map/Agent, PP(옛 이름 PBS), 벤치마크 등)
+│   ├── 09_dynamic_obstacles_plan.md  움직이는(동적) 장애물 지원 확장 설계 분석 — 이후 연구
+│   ├── 10~13_*.md               알고리즘 검증, 등록 순서 개선(fixed-first), 도달성 검사·구조 후보 정교화
+│   ├── 14_session_summary_easy.md  10~13장을 가장 쉬운 말로 정리한 문서
 │   └── PROGRESS.md              구현 진행 이력(버그·설계 결정 로그, Windows/Ubuntu 공용 온보딩 문서)
 ├── DESIGN.md                  전체 연구/설계 로드맵(Phase 0~5), 선행 연구와의 관계
 └── CMakeLists.txt             최상위 빌드 스크립트
@@ -141,10 +154,10 @@ Windows(멀티 컨피그 MSBuild)와 Linux(단일 컨피그 Makefile/Ninja) 모�
 |---|---|---|
 | `--large` | 꺼짐 | 규모 확장 실험: 64x64 맵, 로봇 50/100/150/200대 (장애물은 그대로 1~3칸) |
 | `--repeats N` | 50 | 맵 x 로봇 수 조합마다 반복 횟수 |
-| `--tiers K` | 1 | 선택적 재계획이 "막은 로봇"을 몇 단계까지 추적할지(`PBSConfig::max_escalation_tiers`). 시나리오 생성과 무관해서 K만 바꿔 돌리면 같은 시나리오에서 비교된다 |
-| `--order O` | priority | 선택적 재계획의 등록 순서(`PBSConfig::order`, [12장](docs/12_fixed_first_replan.md)). `priority`=원래 방식(agents 순서로 섞어 처리), `fixed-first`=고정 로봇 먼저 등록 + 구조 로봇은 막힌 로봇 뒤에. 시나리오 생성과 무관 |
-| `--reachability` | 꺼짐 | 도달성 검사(`PBSConfig::check_reachability`, [13장](docs/13_reachability_and_rescue.md)). 다른 로봇이 없어도 목적지에 못 가는 로봇이 있으면 바로 실패 |
-| `--rescue R` | blocked | 구조 로봇 고르는 방법(`PBSConfig::rescue_selection`, 13장). `blocked`=A*가 막혀 본 모든 칸의 주인, `path`=다른 로봇이 없을 때의 최단 경로와 부딪히는 로봇만 |
+| `--tiers K` | 1 | 선택적 재계획이 "막은 로봇"을 몇 단계까지 추적할지(`ReplanConfig::max_escalation_tiers`). 시나리오 생성과 무관해서 K만 바꿔 돌리면 같은 시나리오에서 비교된다 |
+| `--order O` | priority | 선택적 재계획의 등록 순서(`ReplanConfig::order`, [12장](docs/12_fixed_first_replan.md)). `priority`=원래 방식(agents 순서로 섞어 처리), `fixed-first`=고정 로봇 먼저 등록 + 구조 로봇은 막힌 로봇 뒤에. 시나리오 생성과 무관 |
+| `--reachability` | 꺼짐 | 도달성 검사(`ReplanConfig::check_reachability`, [13장](docs/13_reachability_and_rescue.md)). 다른 로봇이 없어도 목적지에 못 가는 로봇이 있으면 바로 실패 |
+| `--rescue R` | blocked | 구조 로봇 고르는 방법(`ReplanConfig::rescue_selection`, 13장). `blocked`=A*가 막혀 본 모든 칸의 주인, `path`=다른 로봇이 없을 때의 최단 경로와 부딪히는 로봇만 |
 
 실행 결과는 표준 출력(stdout)으로 CSV가 그대로 흘러나오는
 구조라, 아래처럼 셸 리다이렉션(`>`)으로 파일에 받아써야 한다 — `>` 뒤의
@@ -269,30 +282,33 @@ python app.py --map open --agents 10 --seed 43
 | 계층 | 역할 | 구현 |
 |---|---|---|
 | 저수준 탐색 | 로봇 1대의 최단 경로(시공간 A*) | `SpaceTimeAStar` |
-| 고수준 조정 | 여러 로봇이 서로 충돌 없이 계획되도록 우선순위 순서로 조정 | `PBS::plan` |
-| 재계획 전략(연구 기여) | 장애물이 생겼을 때 *누구를, 언제, 얼마나* 다시 계산할지 결정 | `PBS::replan`(Tier 0 → Tier 1+ → 안전망) |
+| 고수준 조정 | 여러 로봇이 서로 충돌 없이 계획되도록 우선순위 순서로 조정(고정 우선순위 계획, PP) | `PrioritizedPlanner::plan` |
+| 재계획 전략(연구 기여) | 장애물이 생겼을 때 *누구를, 언제, 얼마나* 다시 계산할지 결정 | `PrioritizedPlanner::replan`(Tier 0 → Tier 1+ → 안전망) |
 
-- **`PBS::plan`**: 로봇들을 우선순위(리스트 순서) 순으로 하나씩 계획. 먼저
+- **`PrioritizedPlanner::plan`**: 로봇들을 우선순위(리스트 순서) 순으로 하나씩 계획. 먼저
   계획된 로봇의 경로는 절대 바뀌지 않는다.
-- **`PBS::full_replan`**: 장애물이 생기면 현재 위치를 새 출발점 삼아
+- **`PrioritizedPlanner::full_replan`**: 장애물이 생기면 현재 위치를 새 출발점 삼아
   **전체** 로봇을 처음부터 다시 계획(베이스라인).
-- **`PBS::replan`**: 장애물과 실제로 마주치는 로봇만(Tier 0) 먼저 다시
+- **`PrioritizedPlanner::replan`**: 장애물과 실제로 마주치는 로봇만(Tier 0) 먼저 다시
   계획하고, 그걸로 안 풀리면 막은 원인 로봇을 추적해서 재계획 대상에
   추가(Tier 1+), 그래도 안 되면 `full_replan`으로 안전하게 폴백.
+  `ReplanConfig`로 등록 순서(`order`), 도달성 검사(`check_reachability`), 구조 후보 선택
+  방법(`rescue_selection`)을 고를 수 있다(기본값은 모두 원래 방식, [12·13장](docs/12_fixed_first_replan.md)).
 
-자세한 원리는 [`docs/05_pbs.md`](docs/05_pbs.md), [`docs/06_selective_replan.md`](docs/06_selective_replan.md),
-연구 포지셔닝은 [`docs/07_research_positioning.md`](docs/07_research_positioning.md)를 참고.
+자세한 원리는 [`docs/05_pbs.md`](docs/05_pbs.md)(옛 이름 PBS로 쓰인 문서), [`docs/06_selective_replan.md`](docs/06_selective_replan.md),
+연구 포지셔닝은 [`docs/07_research_positioning.md`](docs/07_research_positioning.md),
+최근 검증·개선은 [`docs/14_session_summary_easy.md`](docs/14_session_summary_easy.md)를 참고.
 
 ---
 
 ## 로드맵
 
-- [x] Phase 1: C++ 코어(Map, Agent, SpaceTimeAStar, PBS)
+- [x] Phase 1: C++ 코어(Map, Agent, SpaceTimeAStar, PrioritizedPlanner)
 - [x] Phase 2: pybind11 + pygame 2D GUI 데모
 - [x] Phase 3: 선택적 재계획 + 계층적 확장, C++ 벤치마크·시각화
 - [ ] Phase 4: Ubuntu + ROS2 + Gazebo 3D 시뮬레이션(TurtleBot3, 창고형 월드)
 - [ ] Phase 5: 정량 평가 정리(성공률, makespan, sum-of-costs, 재계획 시간)
 
-Phase 4/5의 상세 계획은 [`DESIGN.md`](DESIGN.md) §5, §6, §7 참고. 정적 장애물
-기반 PBS를 동적(움직이는) 장애물 지원으로 확장하는 별도 분석은
-[`docs/09_dynamic_obstacles_plan.md`](docs/09_dynamic_obstacles_plan.md) 참고.
+Phase 4/5의 상세 계획은 [`DESIGN.md`](DESIGN.md) §5, §6, §7 참고. 지금은 예기치 않은
+장애물(나타나서 머무는 장애물)만 다루고, 움직이는(동적) 장애물 지원은 이후 연구로 미뤘다 —
+확장 분석은 [`docs/09_dynamic_obstacles_plan.md`](docs/09_dynamic_obstacles_plan.md) 참고.

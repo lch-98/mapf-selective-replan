@@ -4,6 +4,10 @@
 > `core/include/mapf/reservation_table.hpp`, `core/src/map.cpp` (커밋 `ea38395` 기준).
 > 목적: "전략적 재계획 층"을 설계하기 전에, 지금 기반이 정확히 무엇이고 어디가
 > 약한지 확정한다.
+>
+> **이후 변경(2026-09-13)**: 이 검증 결과에 따라 `PBS` 클래스는 `PrioritizedPlanner`로,
+> `PBSConfig`는 `ReplanConfig`로, `PBSResult`는 `PlanResult`로, `pbs.hpp/.cpp`는
+> `prioritized_planner.hpp/.cpp`로 이름을 바꿨다. 아래 본문의 옛 이름은 당시 기록이다.
 
 ---
 

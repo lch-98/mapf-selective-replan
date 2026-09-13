@@ -31,14 +31,16 @@
 **남은 문제.** (1) 길이 없을 때 포기가 너무 늦다 — "모든 칸 × 모든 시간"을 다 확인한 뒤에야 포기해서
 가끔 2초 넘게 걸린다. (2) 가끔 필요 없는 로봇에게도 부탁한다 — "쉬지 않고 간다"고 가정하고 고르다 보니
 잠깐 기다리면 피할 수 있는 로봇까지 부른다. (3) 중요한 로봇이 양보하는 경우가 생긴다(고친 방법 1의
-대가). (4) 장애물이 아직 움직이지 않는다. (5) 코드 이름은 PBS인데 실제로는 PP라서, 논문에서는 PP라고
-불러야 한다.
+대가). (4)·(5)는 정리했다 — 장애물은 **예기치 않은 장애물(Unexpected Obstacle, 나타나서 그 자리에
+머무는 장애물)**로 연구 범위를 정했고(움직이는 장애물은 이후 연구), 코드 이름도 PBS에서
+`PrioritizedPlanner`로 바꿨다.
 
 ---
 
 ## 14.0 한 장 요약
 
-1. 우리 코드의 `PBS` 클래스는 이름만 PBS고, 실제로는 **PP(고정 우선순위 계획)**였다.
+1. 우리 코드의 `PBS` 클래스는 이름만 PBS고, 실제로는 **PP(고정 우선순위 계획)**였다. 그래서
+   이름을 `PrioritizedPlanner`로 바꿨다.
 2. 선택적 재계획이 자주 실패하던 가장 큰 원인은 **"안 건드린 로봇"과 "다시 계획하는 로봇"을
    우선순위 순서대로 섞어서 등록하는 구조**였다.
 3. 이걸 **"안 건드린 로봇 먼저 전부 등록 + 불려 온 로봇은 맨 뒤에 계획"**으로 바꿨더니,
@@ -79,8 +81,10 @@
 
 ### 새 장애물이 생기면: 선택적 재계획
 
-로봇들이 움직이는 도중에 **새 장애물**이 생겼다고 하자(지금 코드에서는 한 번 생기면 계속 그
-자리에 있는 장애물이다. 움직이는 장애물은 아직 아니다).
+로봇들이 움직이는 도중에 **새 장애물**이 생겼다고 하자. 한 번 생기면 계속 그 자리에 있는
+**예기치 않은 장애물(Unexpected Obstacle)**이다(떨어진 물건, 멈춰 선 설비 등). 물류 현장에서
+움직이는 장애물은 곧 지나가지만, 멈춰 선 장애물은 길을 오래 막아 다른 경로를 찾아야 하게
+만든다. 움직이는 장애물은 이후 연구로 미뤘다.
 
 ```
 1단계  영향받은 로봇 찾기: 옛 경로가 앞으로 장애물 칸을 밟는 로봇만 "재계획 로봇"(working)
@@ -103,6 +107,10 @@
 
 → 알고리즘이 틀린 건 아니다(PP로서는 정확하다). 다만 논문에서 "PBS를 썼다"고 하면 **틀린
 설명**이 된다. "PP 위에 선택적 재계획을 얹었다"고 해야 한다.
+
+**→ 해결함**: 코드 이름을 `PrioritizedPlanner`로 바꿨다(`PBSConfig` → `ReplanConfig`,
+`PBSResult` → `PlanResult`, 파일 `prioritized_planner.hpp/.cpp`, 파이썬 `mapf_py.PrioritizedPlanner`).
+동작은 그대로다(테스트 52개 통과). 이 문서의 아래 절들에서 "`PBS` 클래스"라고 쓴 곳은 바꾸기 전 이름이다.
 
 ---
 
@@ -289,7 +297,7 @@ Tier 0에서 R이 **한 스텝 기다렸다 가서** 끝난다(K는 그대로, R
 | 3-2가 가끔 더 많이 부른다 | "쉬지 않는 일정"만 보고 부딪힘을 판단 | 대기를 허용한 경로로 판단하거나, 두 방법 중 적은 쪽 선택 |
 | 우선순위 높은 로봇이 돌아간다 | 고정 로봇 먼저 등록의 본질적 대가 | 비용이 크게 늘 때만 낮은 로봇을 부르는 규칙 |
 | 비교 기준이 약하다 | 전체 재계획도 순서 하나짜리 PP | 논문에서 명시, 필요하면 더 강한 기준 추가 |
-| 장애물이 움직이지 않는다 | 지금은 "생기면 계속 있는" 장애물만 | 09장의 동적 장애물 확장 |
+| 움직이는 장애물은 다루지 않는다 | 범위 결정: 나타나서 머무는 **예기치 않은 장애물**만 대상(물류 현장에서 움직이는 장애물은 곧 지나감) | 이후 연구(09장) |
 
 ---
 
@@ -297,11 +305,12 @@ Tier 0에서 R이 **한 스텝 기다렸다 가서** 끝난다(K는 그대로, R
 
 | 파일 | 바뀐 것 |
 |---|---|
-| `core/include/mapf/pbs.hpp` | `ReplanOrder`(priority / fixed-first), `RescueSelection`(blocked / path), `PBSConfig`에 `order`, `check_reachability`, `rescue_selection` 추가. **기본값은 전부 원래 방식** |
-| `core/src/pbs.cpp` | `try_replan_set`: 처리 순서 목록을 먼저 만들고 그 순서로 처리. A\* 실패 시 3-2 후보 선택. `replan`: 시작 때 3-1 도달성 검사. 새 함수 `static_shortest_path`(BFS), `shortest_path_conflicts` |
-| `tests/test_pbs.cpp` | 테스트 5개 추가(총 52개, 모두 통과) |
+| `core/include/mapf/prioritized_planner.hpp` | `ReplanOrder`(priority / fixed-first), `RescueSelection`(blocked / path), `ReplanConfig`에 `order`, `check_reachability`, `rescue_selection` 추가. **기본값은 전부 원래 방식** |
+| `core/src/prioritized_planner.cpp` | `try_replan_set`: 처리 순서 목록을 먼저 만들고 그 순서로 처리. A\* 실패 시 3-2 후보 선택. `replan`: 시작 때 3-1 도달성 검사. 새 함수 `static_shortest_path`(BFS), `shortest_path_conflicts` |
+| `tests/test_prioritized_planner.cpp` | 테스트 5개 추가(총 52개, 모두 통과) |
 | `tools/benchmark.cpp` | `--order`, `--reachability`, `--rescue` 옵션. 경로 비용 합·바뀐 로봇 수·충돌 수 컬럼 |
 | `docs/10~14` | 검증·실험 기록과 이 정리 |
+| (이름 변경) | `PBS` → `PrioritizedPlanner`, `PBSConfig` → `ReplanConfig`, `PBSResult` → `PlanResult`, `pbs.hpp/.cpp` → `prioritized_planner.hpp/.cpp`, `test_pbs.cpp` → `test_prioritized_planner.cpp`. 파이썬 바인딩·GUI도 같이 |
 
 기본값을 원래 방식으로 둔 이유: 예전 결과를 그대로 재현할 수 있고, 논문에서 "무엇을 켰을 때
 얼마나 좋아졌나"를 하나씩 비교(ablation)할 수 있기 때문이다.
@@ -314,8 +323,9 @@ Tier 0에서 R이 **한 스텝 기다렸다 가서** 끝난다(K는 그대로, R
 |---|---|
 | 시공간 A\* | (x, y, t) 위에서 찾는 A\*. 기다리기도 한 동작 |
 | 예약 테이블 | "몇 시에 어느 칸을 누가 쓰는지" 적는 장부 |
-| PP | 정해진 순서대로 한 대씩 계획하는 방법(고정 우선순위) |
-| PBS | 순서 자체를 바꿔 가며 찾는 방법. 우리 코드는 이게 **아님** |
+| PP | 정해진 순서대로 한 대씩 계획하는 방법(고정 우선순위). 코드에서는 `PrioritizedPlanner` |
+| PBS | 순서 자체를 바꿔 가며 찾는 방법. 우리 코드는 이게 **아님**(예전 클래스 이름이었지만 바꿈) |
+| 예기치 않은 장애물 (Unexpected Obstacle) | 실행 도중 계획에 없이 나타나 그 자리에 머무는 장애물. 이 연구가 다루는 장애물 |
 | Tail (도착 후 머묾) | 도착한 로봇이 목적지를 끝까지 차지한다고 보고 예약하는 것 |
 | 등록 (`register_path`) | 경로를 장부에 적기. 남의 예약과 겹치면 거절 → 안전 보장의 핵심 |
 | 재계획 로봇 (working) | 이번 시도에서 A\*로 새로 길을 찾는 로봇 |

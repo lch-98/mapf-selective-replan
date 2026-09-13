@@ -1,5 +1,12 @@
 # 5. PBS — 여러 로봇을 충돌 없이 조율하기
 
+> **이름 안내(2026-09-13)**: 이 장의 "PBS"는 코드 클래스의 옛 이름이다. 이 장이 설명하는 방식
+> (순서대로 한 대씩 계획하고 예약 장부로 피하기)은 그대로 맞지만, 순서를 바꿔 가며 탐색하는 진짜
+> PBS(Ma et al., 2019)가 아니라 **고정 우선순위 계획(Prioritized Planning, PP)**이다. 그래서 코드
+> 이름을 `PrioritizedPlanner`로 바꿨다(`pbs.hpp/.cpp` → `prioritized_planner.hpp/.cpp`,
+> `PBSConfig` → `ReplanConfig`, `PBSResult` → `PlanResult`). 자세한 이유는
+> [10장 10.2절](10_algorithm_review.md), 쉬운 설명은 [14장 14.2절](14_session_summary_easy.md).
+
 [04장](04_space_time_astar.md)에서 "로봇 한 대의 경로 찾기"를 만들었습니다.
 이제 그걸 여러 번 호출해서, 여러 로봇 **전체**가 서로 충돌하지 않는 경로 집합을
 만드는 **고수준** 엔진을 봅니다. 이게 **PBS (Priority-Based Search, 우선순위

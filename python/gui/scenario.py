@@ -3,8 +3,8 @@
 #
 # tools/benchmark.cpp의 collect_free_cells / make_random_agents /
 # find_solvable_scenario_and_run(초기 plan() 재시도 부분만)을 파이썬으로
-# 포팅한다. 실제 알고리즘(PBS.plan)은 여기서 다시 짜지 않고 바인딩된
-# mapf_py.PBS를 그대로 호출한다 — 이 파일이 하는 일은 "무작위 시나리오를
+# 포팅한다. 실제 알고리즘(PrioritizedPlanner.plan)은 여기서 다시 짜지 않고 바인딩된
+# mapf_py.PrioritizedPlanner를 그대로 호출한다 — 이 파일이 하는 일은 "무작위 시나리오를
 # 만드는 것"뿐이다.
 #
 # make_obstacles_that_actually_block류의 "장애물이 실제로 막는지 보장하는"
@@ -47,7 +47,7 @@ def make_random_agents(free_cells: list, num_agents: int, rng: random.Random) ->
 def find_solvable_scenario(
     game_map: "mapf_py.Map", num_agents: int, rng: random.Random, max_attempts: int = 200
 ):
-    """초기 PBS.plan()이 성공하는 무작위 배치를 찾을 때까지 재시도한다.
+    """초기 PrioritizedPlanner.plan()이 성공하는 무작위 배치를 찾을 때까지 재시도한다.
 
     tools/benchmark.cpp의 find_solvable_scenario_and_run에서 장애물 관련
     부분을 뺀 것과 같다 — GUI가 열리자마자 절대 풀 수 없는 무작위 배치로
@@ -61,8 +61,8 @@ def find_solvable_scenario(
 
     for _attempt in range(1, max_attempts + 1):
         agents = make_random_agents(free_cells, num_agents, rng)
-        pbs = mapf_py.PBS(game_map)
-        initial = pbs.plan(agents)
+        planner = mapf_py.PrioritizedPlanner(game_map)
+        initial = planner.plan(agents)
         if initial is not None:
             return agents, initial
 

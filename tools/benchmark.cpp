@@ -5,9 +5,9 @@
 // (5/10/20/40) x 방법(전체 재계획 vs 선택적 재계획)을 50회씩 무작위
 // 시나리오로 돌려서, 성공률과 실행 시간을 CSV로 출력한다.
 //
-// 로봇 40대는 이 맵 크기·완전 무작위 배치 조합에서는 PBS의 고정 우선순위
+// 로봇 40대는 이 맵 크기·완전 무작위 배치 조합에서는 PrioritizedPlanner의 고정 우선순위
 // 구조상 초기 plan() 성공률이 낮을 수 있다 — 맵 문제가 아니라 "뒤 순위
-// 로봇이 앞 로봇의 Tail Reservation에 점점 막히는" PBS 자체의 한계다.
+// 로봇이 앞 로봇의 Tail Reservation에 점점 막히는" PrioritizedPlanner 자체의 한계다.
 // find_solvable_scenario_and_run이 kMaxAttempts(200번)까지 재시도해도 못
 // 찾으면 plan_ok=false로 기록하고 넘어가므로, 40대 구간은 plan_attempts와
 // plan_ok 컬럼을 함께 확인해서 "초기 설계 자체의 난이도"를 읽어야 한다.
@@ -17,7 +17,7 @@
 //   2. 장애물 1~3개를 무작위로 고르되, 그중 적어도 하나는 실제로 어느
 //      로봇의 경로와 어느 시각에 겹치도록 만든다 — 그 충돌 시각의 한 스텝
 //      전을 current_time으로 잡는다.
-//   3. PBS::path_hits_obstacle(replan()이 내부에서 쓰는 바로 그 판별
+//   3. PrioritizedPlanner::path_hits_obstacle(replan()이 내부에서 쓰는 바로 그 판별
 //      함수)로, 이 장애물이 실제로 적어도 한 로봇의 기존 경로를 막는지
 //      직접 검증한다. 안 막으면 이 시나리오는 버리고 처음부터 다시 뽑는다
 //      — "기존 경로 그대로 가면 실제로 실패하는" 시나리오만 표본으로
@@ -48,7 +48,7 @@
 #include <vector>
 
 #include "benchmark_maps.hpp"
-#include "mapf/pbs.hpp"
+#include "mapf/prioritized_planner.hpp"
 
 using namespace mapf;
 using namespace mapf::bench;
@@ -104,7 +104,7 @@ std::vector<Agent> make_random_agents(const std::vector<Cell>& free_cells, int n
     return agents;
 }
 
-// path에서 t 시점에 로봇이 서 있는 칸. PBS::position_at(private)과 같은 규칙이다
+// path에서 t 시점에 로봇이 서 있는 칸. PrioritizedPlanner::position_at(private)과 같은 규칙이다
 // — 경로가 t보다 짧으면 이미 도착해서 목적지에 머무는 중(Tail)으로 본다.
 Cell position_at(const Path& path, int t) {
     int index = std::max(0, t - path.front().t);
@@ -122,7 +122,7 @@ int arrival_time(const Path& path) {
     return path[i].t;
 }
 
-int sum_of_costs(const PBSResult& paths) {
+int sum_of_costs(const PlanResult& paths) {
     int sum = 0;
     for (const auto& [id, path] : paths) sum += arrival_time(path);
     return sum;
@@ -131,7 +131,7 @@ int sum_of_costs(const PBSResult& paths) {
 // current_time 이후의 움직임이 before와 달라진 로봇 수. 경로 벡터를 그대로 비교하면
 // 이어붙이기로 시각만 채워진 경우(위치는 같음)도 "바뀜"으로 잡히므로, 시각별 위치를
 // 비교한다. 다시 탐색했지만 같은 경로가 나온 로봇은 바뀌지 않은 것으로 센다.
-int count_changed(const PBSResult& before, const PBSResult& after, int current_time) {
+int count_changed(const PlanResult& before, const PlanResult& after, int current_time) {
     int changed = 0;
     for (const auto& [id, old_path] : before) {
         const Path& new_path = after.at(id);
@@ -148,7 +148,7 @@ int count_changed(const PBSResult& before, const PBSResult& after, int current_t
 
 // 결과 경로의 충돌(같은 시각 같은 칸 / 자리 맞바꾸기) 수. 결과는 register_path를
 // 통과했으므로 항상 0이어야 한다 — 등록 순서(--order)를 바꿔도 안전한지 전수 검사한다.
-int count_conflicts(const PBSResult& paths) {
+int count_conflicts(const PlanResult& paths) {
     std::vector<const Path*> list;
     int horizon = 0;
     for (const auto& [id, path] : paths) {
@@ -175,7 +175,7 @@ int count_conflicts(const PBSResult& paths) {
 }
 
 // t 시점에 어느 로봇이든 cell 위에 서 있는가?
-bool someone_stands_on(const PBSResult& paths, Cell cell, int t) {
+bool someone_stands_on(const PlanResult& paths, Cell cell, int t) {
     for (const auto& [id, path] : paths) {
         if (position_at(path, t) == cell) return true;
     }
@@ -202,7 +202,7 @@ bool someone_stands_on(const PBSResult& paths, Cell cell, int t) {
 // 주의 2: 같은 이유로, 로봇 A의 경로 중간 칸이 다른 로봇 B의 *시작점*과
 // 같을 수도 있다. 이때 chosen.t==1인 후보가 뽑히면 current_time(=chosen.t-1)이
 // 0이 되는데, path_hits_obstacle은 current_time을 포함해서 검사하므로
-// (core/src/pbs.cpp의 for (t = current_time; ...) 참고) t=0에 그 칸에 서
+// (core/src/prioritized_planner.cpp의 for (t = current_time; ...) 참고) t=0에 그 칸에 서
 // 있는 로봇 B가 "이미 장애물 안에 서 있는" 모순 상황에 놓인다. 이 경우
 // register_path가 시작 칸 등록에서 실패해 full_replan/replan 둘 다
 // 조용히 실패해버려서, "재계획으로 우회 가능한 충돌"이 아닌 데이터가 CSV에
@@ -217,7 +217,7 @@ bool someone_stands_on(const PBSResult& paths, Cell cell, int t) {
 // (수정 전 벤치마크 344개 중 16개가 이 경우였고 전부 양쪽 실패 — 직접 세어서
 // 확인). 그래서 t-1 시점에 그 칸 위에 서 있는 로봇이 있으면 후보에서 뺀다.
 // (2D GUI도 "현재 로봇이 있는 칸"에는 장애물을 못 놓게 막는다.)
-std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
+std::vector<SpaceTimeCell> collect_path_cells(const PlanResult& initial,
                                                const std::vector<Cell>& all_goals,
                                                const std::vector<Cell>& all_starts) {
     std::vector<SpaceTimeCell> cells;
@@ -256,7 +256,7 @@ std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
 // 하나는 반드시 실제 충돌을 일으키게 보장한다).
 //
 // out_current_time에는 "그 칸에 도착하기 한 스텝 전" 시각을 채운다 — 장애물
-// 칸의 시각(chosen.t) 그대로 쓰면 안 된다. 왜냐하면 PBS::full_replan/replan은
+// 칸의 시각(chosen.t) 그대로 쓰면 안 된다. 왜냐하면 PrioritizedPlanner::full_replan/replan은
 // "current_time 시점에 로봇이 있던 칸"에서부터 재탐색을 시작하는데, 그 칸이
 // 곧 장애물 칸이라면 "로봇이 이미 장애물 안에 서 있다"는 풀 수 없는 모순이
 // 된다(A* 자체는 출발 칸 점유 검사를 안 해서 경로를 찾지만, 그 경로를
@@ -271,7 +271,7 @@ std::vector<SpaceTimeCell> collect_path_cells(const PBSResult& initial,
 // 데 수 초가 걸리는 사례가 실제로 재현됐다(직접 디버깅으로 확인).
 std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& free_cells,
                                                        const std::vector<Agent>& agents,
-                                                       const PBSResult& initial,
+                                                       const PlanResult& initial,
                                                        std::mt19937& rng, int* out_current_time) {
     std::vector<Cell> all_goals;
     std::vector<Cell> all_starts;
@@ -287,7 +287,7 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
     //
     // 이때 fallback 칸은 누군가의 start와도, 누군가의 goal과도 겹치면 안 된다
     // — current_time=0이면 path_hits_obstacle이 t=0부터 검사하는데
-    // (core/src/pbs.cpp), 겹치는 대상에 따라 서로 다른 이유로 문제가 생긴다:
+    // (core/src/prioritized_planner.cpp), 겹치는 대상에 따라 서로 다른 이유로 문제가 생긴다:
     //   - start와 겹치면: t=0의 위치가 곧 그 로봇의 start이므로 그 로봇이
     //     "이미 장애물 안에 서 있는" 모순에 빠져 register_path가 실패한다.
     //   - goal과 겹치면: path_hits_obstacle의 check_until이 그 로봇의 도착
@@ -372,14 +372,14 @@ double elapsed_ms(std::chrono::steady_clock::time_point start) {
 }
 
 // initial의 agents 중 적어도 한 명이, current_time 이후 시점에 obstacles와
-// 실제로 겹치는지 확인한다. PBS::path_hits_obstacle을 그대로 쓴다 —
+// 실제로 겹치는지 확인한다. PrioritizedPlanner::path_hits_obstacle을 그대로 쓴다 —
 // replan()이 "영향받는 로봇"을 판별할 때 쓰는 바로 그 함수이므로, 여기서
 // "막혔다"고 판정되면 라이브러리 내부에서도 똑같이 "막혔다"고 판정된다는
 // 보장이 생긴다(직접 복제한 로직이 아니라서 기준이 어긋날 일이 없다.)
-bool obstacles_actually_block_someone(const std::vector<Agent>& agents, const PBSResult& initial,
+bool obstacles_actually_block_someone(const std::vector<Agent>& agents, const PlanResult& initial,
                                        const std::vector<Cell>& obstacles, int current_time) {
     for (const Agent& agent : agents) {
-        if (PBS::path_hits_obstacle(initial.at(agent.id), obstacles, current_time)) return true;
+        if (PrioritizedPlanner::path_hits_obstacle(initial.at(agent.id), obstacles, current_time)) return true;
     }
     return false;
 }
@@ -389,8 +389,8 @@ bool obstacles_actually_block_someone(const std::vector<Agent>& agents, const PB
 // 시나리오를 확인한 뒤 agents/initial/obstacles/current_time을 넘겨주므로,
 // 여기서는 plan_ok=true가 항상 보장된다.
 ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents,
-                                 const PBSResult& initial, const std::vector<Cell>& obstacles,
-                                 int current_time, const PBSConfig& replan_config) {
+                                 const PlanResult& initial, const std::vector<Cell>& obstacles,
+                                 int current_time, const ReplanConfig& replan_config) {
     ScenarioResult result;
     result.plan_ok = true;
     result.initial_soc = sum_of_costs(initial);
@@ -399,9 +399,9 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 
     // 방법 A: 전체 재계획 (현재 위치 기준).
     {
-        PBS pbs_a(map);
+        PrioritizedPlanner planner_a(map);
         auto t0 = std::chrono::steady_clock::now();
-        std::optional<PBSResult> full = pbs_a.full_replan(agents, initial, obstacles, current_time);
+        std::optional<PlanResult> full = planner_a.full_replan(agents, initial, obstacles, current_time);
         result.full_replan_ms = elapsed_ms(t0);
         result.full_replan_ok = full.has_value();
         if (full.has_value()) {
@@ -412,9 +412,9 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 
     // 방법 B: 선택적 재계획(Tier 0/1/안전망).
     {
-        PBS pbs_b(map, AStarConfig{}, replan_config);
+        PrioritizedPlanner planner_b(map, AStarConfig{}, replan_config);
         auto t0 = std::chrono::steady_clock::now();
-        std::optional<ReplanResult> selective = pbs_b.replan(agents, initial, obstacles, current_time);
+        std::optional<ReplanResult> selective = planner_b.replan(agents, initial, obstacles, current_time);
         result.selective_replan_ms = elapsed_ms(t0);
         result.selective_replan_ok = selective.has_value();
         if (selective.has_value()) {
@@ -443,7 +443,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 // max_attempts번 안에 못 찾으면(극히 드문 경우) 마지막 실패를 그대로
 // plan_ok=false로 기록하고 멈춘다 — 무한 루프를 막기 위한 안전장치다.
 ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, std::mt19937& rng,
-                                              const PBSConfig& replan_config) {
+                                              const ReplanConfig& replan_config) {
     constexpr int kMaxAttempts = 200;
 
     std::vector<Cell> free_cells = collect_free_cells(map); // 벽이 아닌 모든 Cell들을 수집
@@ -451,8 +451,8 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
     for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
         std::vector<Agent> agents = make_random_agents(free_cells, num_agents, rng); // 벽이 아닌 모든 Cell 들에서 시작점과 도착점을 랜덤으로 에이전트에 할당
 
-        PBS pbs(map);
-        std::optional<PBSResult> initial = pbs.plan(agents);
+        PrioritizedPlanner planner(map);
+        std::optional<PlanResult> initial = planner.plan(agents);
         if (!initial.has_value()) {
             if (attempt == kMaxAttempts) {
                 ScenarioResult failed;
@@ -503,7 +503,7 @@ struct Task {
     int num_agents;
     int trial;
     uint32_t seed;  // 이 task 전용 시드 — 스레드 간에 절대 공유하지 않는다.
-    PBSConfig replan_config;  // 방법 B(replan)의 설정(--tiers). 모든 task가 같은 값.
+    ReplanConfig replan_config;  // 방법 B(replan)의 설정(--tiers). 모든 task가 같은 값.
 };
 
 // 작업 하나를 처리해서 CSV 한 줄(개행 포함)을 문자열로 만들어 돌려준다.
@@ -538,17 +538,17 @@ int main(int argc, char** argv) {
     //              시간 차이가 벌어지는지를 보는 실험이다.
     // --repeats N: 반복 횟수(기본 50).
     // --tiers K  : 선택적 재계획이 "막은 로봇"을 몇 단계까지 추적할지
-    //              (PBSConfig::max_escalation_tiers, 기본 1). 시나리오 생성은
+    //              (ReplanConfig::max_escalation_tiers, 기본 1). 시나리오 생성은
     //              이 값과 무관하므로 K만 바꿔 돌리면 같은 시나리오에서 비교된다.
-    // --order O  : 선택적 재계획의 등록 순서(PBSConfig::order, 12장).
+    // --order O  : 선택적 재계획의 등록 순서(ReplanConfig::order, 12장).
     //              priority(기본, 원래 방식) | fixed-first(고정 로봇 먼저 + 구조 로봇은 뒤에).
     //              --tiers와 마찬가지로 시나리오 생성과 무관하다.
-    // --reachability : 도달성 검사를 켠다(PBSConfig::check_reachability, 13장).
-    // --rescue R : 구조 로봇 고르는 방법(PBSConfig::rescue_selection, 13장).
+    // --reachability : 도달성 검사를 켠다(ReplanConfig::check_reachability, 13장).
+    // --rescue R : 구조 로봇 고르는 방법(ReplanConfig::rescue_selection, 13장).
     //              blocked(기본, 막혀 본 모든 칸의 주인) | path(최단 경로와 부딪히는 로봇만).
     bool large = false;
     int repeats = 50;
-    PBSConfig replan_config;
+    ReplanConfig replan_config;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--large") {

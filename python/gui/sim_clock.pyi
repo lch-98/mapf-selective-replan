@@ -24,5 +24,5 @@ class SimClock:
     def position_at(self, path: List["mapf_py.SpaceTimeCell"]) -> "mapf_py.Cell":
         """path[current_time]의 위치를 반환한다. current_time이 경로
         길이를 넘으면 마지막 칸(목적지)에 계속 머무는 것으로 본다 —
-        PBS::position_at의 Tail Reservation 개념과 동일하다."""
+        PrioritizedPlanner::position_at의 Tail Reservation 개념과 동일하다."""
         ...

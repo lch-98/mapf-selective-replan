@@ -43,28 +43,28 @@ def main() -> None:
     ]
     check(agents[0].id == 0 and agents[0].start.x == 0, "Agent 필드 접근")
 
-    print("[4] PBS.plan() 성공 + PBSResult가 dict로 보이는지")
+    print("[4] PrioritizedPlanner.plan() 성공 + PlanResult가 dict로 보이는지")
     m2 = mapf_py.Map(5, 5)
-    pbs = mapf_py.PBS(m2)
-    result = pbs.plan(agents)
+    planner = mapf_py.PrioritizedPlanner(m2)
+    result = planner.plan(agents)
     check(result is not None, "plan()이 None이 아님(성공)")
-    check(isinstance(result, dict), "PBSResult가 파이썬 dict로 변환됨")
+    check(isinstance(result, dict), "PlanResult가 파이썬 dict로 변환됨")
     check(set(result.keys()) == {0, 1}, "결과 dict의 키가 agent id와 일치")
     for agent_id, path in result.items():
         check(isinstance(path, list) and len(path) > 0, f"agent {agent_id}의 경로가 비어있지 않음")
         check(isinstance(path[0], mapf_py.SpaceTimeCell), "경로 원소가 SpaceTimeCell")
 
     print("[5] full_replan / replan 빈 장애물로 호출")
-    full = pbs.full_replan(agents, result, [], 0)
+    full = planner.full_replan(agents, result, [], 0)
     check(full is not None, "full_replan(장애물 없음)이 성공")
 
-    selective = pbs.replan(agents, result, [], 0)
+    selective = planner.replan(agents, result, [], 0)
     check(selective is not None, "replan(장애물 없음)이 성공")
     check(selective.escalation_tier == 0, "장애물이 없으면 escalation_tier=0(아무도 안 건드림)")
     check(isinstance(selective.paths, dict), "ReplanResult.paths가 dict로 보임")
 
-    print("[6] PBS.path_hits_obstacle 정적 메서드 확인")
-    hits = mapf_py.PBS.path_hits_obstacle(result[0], [mapf_py.Cell(1, 0)], 0)
+    print("[6] PrioritizedPlanner.path_hits_obstacle 정적 메서드 확인")
+    hits = mapf_py.PrioritizedPlanner.path_hits_obstacle(result[0], [mapf_py.Cell(1, 0)], 0)
     check(isinstance(hits, bool), "path_hits_obstacle이 bool 반환")
 
     print("[7] std::invalid_argument -> Python ValueError 변환 확인")

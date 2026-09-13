@@ -4,7 +4,7 @@
 # scenario.py의 공개 인터페이스. tools/benchmark.cpp의 collect_free_cells /
 # make_random_agents / find_solvable_scenario_and_run(초기 plan() 재시도
 # 부분만)을 파이썬으로 포팅한 것 — "무작위 시나리오를 만드는 것"만 담당하고,
-# 실제 경로 계산(PBS.plan)은 바인딩된 mapf_py.PBS를 그대로 호출한다.
+# 실제 경로 계산(PrioritizedPlanner.plan)은 바인딩된 mapf_py.PrioritizedPlanner를 그대로 호출한다.
 # ─────────────────────────────────────────────────────────────────
 import random
 from typing import List, Tuple
@@ -28,8 +28,8 @@ def find_solvable_scenario(
     num_agents: int,
     rng: random.Random,
     max_attempts: int = 200,
-) -> Tuple[List["mapf_py.Agent"], "mapf_py.PBSResult"]:
-    """초기 PBS.plan()이 성공하는 무작위 배치를 찾을 때까지 재시도한다.
+) -> Tuple[List["mapf_py.Agent"], "mapf_py.PlanResult"]:
+    """초기 PrioritizedPlanner.plan()이 성공하는 무작위 배치를 찾을 때까지 재시도한다.
     성공하면 (agents, initial_paths) 튜플을 반환한다. max_attempts번 안에
     못 찾으면(극히 드문 경우) RuntimeError를 던진다."""
     ...

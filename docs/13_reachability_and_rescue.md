@@ -1,8 +1,8 @@
 # 13. 아이디어 3 — 도달성 검사 + 최단 경로 기반 구조 후보
 
 > 작성: 2026-09-13. 11장 11.6절의 아이디어 3을 구현하고, 12장의 fixed-first 위에서 비교했다.
-> 대상 코드: `core/include/mapf/pbs.hpp`(`PBSConfig::check_reachability`, `RescueSelection`),
-> `core/src/pbs.cpp`(`static_shortest_path`, `shortest_path_conflicts`, `replan`,
+> 대상 코드: `core/include/mapf/prioritized_planner.hpp`(`ReplanConfig::check_reachability`, `RescueSelection`),
+> `core/src/prioritized_planner.cpp`(`static_shortest_path`, `shortest_path_conflicts`, `replan`,
 > `try_replan_set`), `tools/benchmark.cpp`(`--reachability`, `--rescue`).
 
 ---
@@ -41,7 +41,7 @@
 - 길은 있지만 **가장 빨리 가도 `max_timestep` 안에 도착 못 하면** → 바로 실패.
 - 둘 다 아니면 → 평소대로 진행.
 
-`PBSConfig::check_reachability`(기본 `false`)로 켠다.
+`ReplanConfig::check_reachability`(기본 `false`)로 켠다.
 
 ### 왜 결과가 바뀌지 않나 (중요)
 
@@ -81,7 +81,7 @@ A\*는 `max_timestep`(기본 256)까지만 탐색한다. 칸으로는 이어져 
    - 도착 후 머묾: 도착한 뒤 목적지를 누가 차지한다.
 4. 이 칸들의 주인만 구조 로봇 후보가 된다.
 
-`PBSConfig::rescue_selection = RescueSelection::kShortestPathConflicts`로 켠다(기본은 원래 방식
+`ReplanConfig::rescue_selection = RescueSelection::kShortestPathConflicts`로 켠다(기본은 원래 방식
 `kBlockedCells`).
 
 ### 되돌아가는 규칙

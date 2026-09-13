@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────────
-// core/src/pbs.cpp
+// core/src/prioritized_planner.cpp
 //
-// pbs.hpp에서 선언한 PBS::plan / PBS::replan의 실제 동작을 구현한다.
+// prioritized_planner.hpp에서 선언한 PrioritizedPlanner::plan / PrioritizedPlanner::replan의 실제 동작을 구현한다.
 // ─────────────────────────────────────────────────────────────────
-#include "mapf/pbs.hpp"
+#include "mapf/prioritized_planner.hpp"
 
 #include <algorithm>
 #include <queue>
@@ -80,10 +80,10 @@ std::vector<Cell> static_shortest_path(const Map& map, Cell from, Cell to,
 
 }  // namespace
 
-PBS::PBS(const Map& map, AStarConfig config, PBSConfig replan_config)
+PrioritizedPlanner::PrioritizedPlanner(const Map& map, AStarConfig config, ReplanConfig replan_config)
     : map_(map), config_(config), replan_config_(replan_config) {}
 
-bool PBS::register_path(int agent_id, const Path& path) {
+bool PrioritizedPlanner::register_path(int agent_id, const Path& path) {
     // 경로의 모든 칸(vertex)과 모든 이동(edge)을 등록한다.
     //
     // vertex 등록에 reserve_if_unowned를 쓰는 이유: 이 경로는 A*가 이미
@@ -135,17 +135,17 @@ bool PBS::register_path(int agent_id, const Path& path) {
     return true;
 }
 
-std::optional<PBSResult> PBS::plan(const std::vector<Agent>& agents) {
+std::optional<PlanResult> PrioritizedPlanner::plan(const std::vector<Agent>& agents) {
     std::unordered_set<int> seen_ids; // 혹시 모를 중복 (agent=로봇 id 중복 제거)
     for (const Agent& agent : agents) {
         if (!seen_ids.insert(agent.id).second) {
-            throw std::invalid_argument("PBS::plan: agents must not contain duplicate ids");
+            throw std::invalid_argument("PrioritizedPlanner::plan: agents must not contain duplicate ids");
         }
     }
 
     table_.clear();
 
-    PBSResult result;
+    PlanResult result;
 
     for (const Agent& agent : agents) {
         SpaceTimeAStar astar(map_, table_, config_);
@@ -164,7 +164,7 @@ std::optional<PBSResult> PBS::plan(const std::vector<Agent>& agents) {
     return result;
 }
 
-Cell PBS::position_at(const Path& path, int current_time) {
+Cell PrioritizedPlanner::position_at(const Path& path, int current_time) {
     // path[i].t는 i와 같은 값으로 단조 증가한다(path[0].t가 시작 시각).
     // current_time이 경로 길이를 넘으면 이미 도착해서 Tail 상태이므로
     // 목적지 칸(path.back())에 계속 있다고 본다(06장 6.4절 구현 디테일).
@@ -177,7 +177,7 @@ Cell PBS::position_at(const Path& path, int current_time) {
     return Cell{path[static_cast<size_t>(index)].x, path[static_cast<size_t>(index)].y};
 }
 
-bool PBS::path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
+bool PrioritizedPlanner::path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
                               int current_time) {
     // current_time 이후 시점만 본다 — 이미 지나간 과거는 다시 계획해도
     // 바꿀 수 없으므로 영향 판정에서 의미가 없다.
@@ -192,7 +192,7 @@ bool PBS::path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obst
     return false;
 }
 
-void PBS::reserve_new_obstacles(const std::vector<Cell>& new_obstacles, int current_time) {
+void PrioritizedPlanner::reserve_new_obstacles(const std::vector<Cell>& new_obstacles, int current_time) {
     // new_obstacles는 current_time 이후로 영원히 막혀 있다고 가정한다
     // 06장은 "장애물이 생겼다"고만 말하고 언제 사라지는지는 다루지 않으므로,
     // max_timestep까지 계속 점유된 것으로 등록한다. agent_id를 생략해
@@ -205,8 +205,8 @@ void PBS::reserve_new_obstacles(const std::vector<Cell>& new_obstacles, int curr
     }
 }
 
-std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
-                                              const PBSResult& previous_paths,
+std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<Agent>& agents,
+                                              const PlanResult& previous_paths,
                                               const std::vector<int>& working_ids,
                                               const std::vector<Cell>& new_obstacles,
                                               int current_time,
@@ -215,7 +215,7 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
     table_.clear();
     reserve_new_obstacles(new_obstacles, current_time);
 
-    PBSResult result;
+    PlanResult result;
 
     auto in_working = [&working_ids](int id) {
         return std::find(working_ids.begin(), working_ids.end(), id) != working_ids.end();
@@ -320,7 +320,7 @@ std::optional<PBSResult> PBS::try_replan_set(const std::vector<Agent>& agents,
     return result;
 }
 
-std::vector<SpaceTimeCell> PBS::shortest_path_conflicts(Cell from, Cell goal,
+std::vector<SpaceTimeCell> PrioritizedPlanner::shortest_path_conflicts(Cell from, Cell goal,
                                                          const std::vector<Cell>& new_obstacles,
                                                          int current_time) const {
     std::vector<SpaceTimeCell> conflicts;
@@ -354,14 +354,14 @@ std::vector<SpaceTimeCell> PBS::shortest_path_conflicts(Cell from, Cell goal,
     return conflicts;
 }
 
-std::optional<PBSResult> PBS::full_replan(const std::vector<Agent>& agents,
-                                           const PBSResult& previous_paths,
+std::optional<PlanResult> PrioritizedPlanner::full_replan(const std::vector<Agent>& agents,
+                                           const PlanResult& previous_paths,
                                            const std::vector<Cell>& new_obstacles,
                                            int current_time) {
     table_.clear();
     reserve_new_obstacles(new_obstacles, current_time);
 
-    PBSResult result;
+    PlanResult result;
 
     for (const Agent& agent : agents) {
         const Path& old_path = previous_paths.at(agent.id);
@@ -380,8 +380,8 @@ std::optional<PBSResult> PBS::full_replan(const std::vector<Agent>& agents,
     return result;
 }
 
-std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
-                                         const PBSResult& previous_paths,
+std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>& agents,
+                                         const PlanResult& previous_paths,
                                          const std::vector<Cell>& new_obstacles,
                                          int current_time) {
     // 1단계: 영향받는 로봇 판별 (06장 6.4절).
@@ -421,7 +421,7 @@ std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
     for (int tier = 0; tier <= replan_config_.max_escalation_tiers; ++tier) {
         std::vector<SpaceTimeCell> blocked; // try_replan_set() -> out_blocked (working_ids에 포함된 로봇 경로계획 실패시)
         std::optional<int> blocked_owner;   // try_replan_set() -> out_blocked_owner (working_ids에 포함되지 않은 로봇 경로계획 실패시)
-        std::optional<PBSResult> attempt = try_replan_set(
+        std::optional<PlanResult> attempt = try_replan_set(
             agents, previous_paths, working_ids, new_obstacles, current_time, &blocked,
             &blocked_owner);
 
@@ -469,7 +469,7 @@ std::optional<ReplanResult> PBS::replan(const std::vector<Agent>& agents,
     }
 
     // 3단계: 안전망 — 전체 재계획(현재 위치 기준).
-    std::optional<PBSResult> fallback =
+    std::optional<PlanResult> fallback =
         full_replan(agents, previous_paths, new_obstacles, current_time);
     if (!fallback.has_value()) return std::nullopt;
 

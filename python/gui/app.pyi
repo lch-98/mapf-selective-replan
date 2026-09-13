@@ -24,7 +24,7 @@ class ReplanSideResult:
     """좌우 패널 중 한쪽(full_replan 또는 selective replan)의 최신 계산
     결과를 담는 간단한 값 객체. 알고리즘 로직은 없고 결과 보관 용도다."""
 
-    paths: "mapf_py.PBSResult"
+    paths: "mapf_py.PlanResult"
     elapsed_ms: float
     ok: bool
     escalation_tier: Optional[int]
@@ -44,7 +44,7 @@ class App:
     game_map: "mapf_py.Map"
     num_agents: int
     agents: List["mapf_py.Agent"]
-    initial_paths: "mapf_py.PBSResult"
+    initial_paths: "mapf_py.PlanResult"
     obstacles: List["mapf_py.Cell"]
     full_side: ReplanSideResult
     selective_side: ReplanSideResult
@@ -85,7 +85,7 @@ class App:
         호출한다."""
         ...
 
-    def _frozen_paths_at_current_time(self, base_paths: "mapf_py.PBSResult") -> "mapf_py.PBSResult":
+    def _frozen_paths_at_current_time(self, base_paths: "mapf_py.PlanResult") -> "mapf_py.PlanResult":
         """재계획 실패 시 보여줄 경로: base_paths(그 패널이 실패 직전까지
         따라가던 경로)의 과거 이동 이력은 그대로 보존하고, current_time
         시점부터는 같은 자리에 멈춰 선 것으로 표시한다. 이게 없으면 실패해도
@@ -93,7 +93,7 @@ class App:
         보이는 착시가 생긴다."""
         ...
 
-    def waiting_agent_ids(self, paths: "mapf_py.PBSResult") -> set:
+    def waiting_agent_ids(self, paths: "mapf_py.PlanResult") -> set:
         """이번 스텝(t -> t+1)에 제자리에 머물다가 나중에 다시 움직일 로봇 id
         (= 양보하며 기다리는 로봇). 목적지 도착 후 머무는 로봇, 실패로 멈춘
         로봇은 제외. draw()가 W키로 켠 강조 표시와 상태 바 개수에 쓴다."""
@@ -114,10 +114,10 @@ class App:
         자기가 따라가는 경로(full_side.paths / selective_side.paths)를
         기준으로 재계획한다 — 처음 경로를 넘기면 두 번째 장애물부터 로봇이
         처음 경로상의 위치로 순간이동한다. 아무 로봇도 영향받지 않은 경우
-        (PBS.path_hits_obstacle이 전부 False)는 패널마다 note로 알려준다."""
+        (PrioritizedPlanner.path_hits_obstacle이 전부 False)는 패널마다 note로 알려준다."""
         ...
 
-    def total_path_len(self, paths: "mapf_py.PBSResult") -> int:
+    def total_path_len(self, paths: "mapf_py.PlanResult") -> int:
         """모든 로봇의 경로 길이 합(단순 통계 표시용)."""
         ...
 

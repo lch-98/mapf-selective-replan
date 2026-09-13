@@ -35,7 +35,7 @@ struct AStarResult {
 // 찾으라는 요청만 받고 응답한다.
 //
 // 도착 판정: goal에 도착한 뒤 max_timestep까지 goal이 한 번도 예약되어 있지
-// 않아야 도착으로 인정한다(PBS의 Tail Reservation과 같은 기준). 나중에 누가
+// 않아야 도착으로 인정한다(PrioritizedPlanner의 Tail Reservation과 같은 기준). 나중에 누가
 // goal을 지나갈 예정이면 탐색을 계속해서, 비켜 있다가/기다렸다가 늦게 도착하는
 // 경로를 찾는다. goal이 max_timestep까지 막혀 있으면 탐색 없이 바로 실패한다.
 class SpaceTimeAStar {

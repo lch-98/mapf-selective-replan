@@ -1,18 +1,18 @@
 // ─────────────────────────────────────────────────────────────────
 // bindings/mapf_bindings.cpp
 //
-// C++ 코어(mapf::Cell/Agent/Map/PBS 등)를 파이썬 확장 모듈 mapf_py로
+// C++ 코어(mapf::Cell/Agent/Map/PrioritizedPlanner 등)를 파이썬 확장 모듈 mapf_py로
 // 그대로 노출한다. GUI가 순수 파이썬으로 알고리즘을 다시 짜지 않고,
-// 실제로 컴파일된 C++ PBS::plan/replan/full_replan을 직접 호출하게
+// 실제로 컴파일된 C++ PrioritizedPlanner::plan/replan/full_replan을 직접 호출하게
 // 하기 위한 얇은 바인딩 계층이다.
 //
 // 바인딩 순서가 곧 의존 순서다 — pybind11은 어떤 타입을 시그니처에서
 // 참조하려면 그 타입이 먼저 등록되어 있어야 한다(Agent가 Cell을 쓰고,
-// PBS 생성자가 Map/AStarConfig/PBSConfig를 쓰므로).
+// PrioritizedPlanner 생성자가 Map/AStarConfig/ReplanConfig를 쓰므로).
 //
-// PBSResult(= std::unordered_map<int, Path>)는 별도 바인딩이 필요 없다 —
+// PlanResult(= std::unordered_map<int, Path>)는 별도 바인딩이 필요 없다 —
 // SpaceTimeCell만 등록되면 pybind11/stl.h의 제네릭 map/vector caster가
-// dict[int, list[SpaceTimeCell]]로 자동 변환해준다. "바인딩된 PBSResult
+// dict[int, list[SpaceTimeCell]]로 자동 변환해준다. "바인딩된 PlanResult
 // 클래스"는 따로 존재하지 않는다.
 // ─────────────────────────────────────────────────────────────────
 #include <pybind11/operators.h>
@@ -21,14 +21,14 @@
 
 #include "mapf/agent.hpp"
 #include "mapf/map.hpp"
-#include "mapf/pbs.hpp"
+#include "mapf/prioritized_planner.hpp"
 #include "mapf/space_time_astar.hpp"
 
 namespace py = pybind11;
 using namespace mapf;
 
 PYBIND11_MODULE(mapf_py, m) {
-    m.doc() = "mapf C++ 코어(Map, Agent, PBS)를 그대로 노출하는 pybind11 바인딩";
+    m.doc() = "mapf C++ 코어(Map, Agent, PrioritizedPlanner)를 그대로 노출하는 pybind11 바인딩";
 
     // ── Cell ────────────────────────────────────────────────────
     // C++에는 해시 함수가 없다(std::map/set 키로만 쓰였으므로 operator<로
@@ -95,17 +95,17 @@ PYBIND11_MODULE(mapf_py, m) {
         .def("neighbors", &Map::neighbors, py::arg("cell"))
         .def("set_obstacle", &Map::set_obstacle, py::arg("x"), py::arg("y"));
 
-    // ── AStarConfig / PBSConfig ─────────────────────────────────
+    // ── AStarConfig / ReplanConfig ─────────────────────────────────
     py::class_<AStarConfig>(m, "AStarConfig")
         .def(py::init<>())
         .def_readwrite("max_timestep", &AStarConfig::max_timestep);
 
-    py::class_<PBSConfig>(m, "PBSConfig")
+    py::class_<ReplanConfig>(m, "ReplanConfig")
         .def(py::init<>())
-        .def_readwrite("max_escalation_tiers", &PBSConfig::max_escalation_tiers);
+        .def_readwrite("max_escalation_tiers", &ReplanConfig::max_escalation_tiers);
 
     // ── ReplanResult ────────────────────────────────────────────
-    // paths는 PBSResult(= std::unordered_map<int, Path>) 그대로 반환된다 —
+    // paths는 PlanResult(= std::unordered_map<int, Path>) 그대로 반환된다 —
     // 파이썬에서는 dict[int, list[SpaceTimeCell]]로 자연스럽게 보인다.
     py::class_<ReplanResult>(m, "ReplanResult")
         .def_readonly("paths", &ReplanResult::paths)
@@ -113,22 +113,22 @@ PYBIND11_MODULE(mapf_py, m) {
         .def_readonly("escalation_tier", &ReplanResult::escalation_tier)
         .def_readonly("rescued_ids", &ReplanResult::rescued_ids);
 
-    // ── PBS ─────────────────────────────────────────────────────
-    // PBS는 생성자 인자로 받은 const Map&를 멤버로 그대로 저장한다(복사가
-    // 아니라 참조). 파이썬에서 Map 객체가 PBS보다 먼저 가비지 컬렉션되면
-    // PBS가 댕글링 참조를 갖게 되어 크래시가 난다 — py::keep_alive<1,2>()로
-    // "이 생성자가 만드는 PBS 객체(인덱스 1)가 살아있는 동안 map 인자
+    // ── PrioritizedPlanner ─────────────────────────────────────────────────────
+    // PrioritizedPlanner는 생성자 인자로 받은 const Map&를 멤버로 그대로 저장한다(복사가
+    // 아니라 참조). 파이썬에서 Map 객체가 PrioritizedPlanner보다 먼저 가비지 컬렉션되면
+    // PrioritizedPlanner가 댕글링 참조를 갖게 되어 크래시가 난다 — py::keep_alive<1,2>()로
+    // "이 생성자가 만드는 PrioritizedPlanner 객체(인덱스 1)가 살아있는 동안 map 인자
     // (인덱스 2)도 반드시 함께 살아있게" 강제한다. 이 한 줄을 빠뜨리면
     // 안 되는 이유가 바로 이것 — 절대 생략하지 말 것.
-    py::class_<PBS>(m, "PBS")
-        .def(py::init<const Map&, AStarConfig, PBSConfig>(), py::arg("map"),
-             py::arg("config") = AStarConfig{}, py::arg("replan_config") = PBSConfig{},
+    py::class_<PrioritizedPlanner>(m, "PrioritizedPlanner")
+        .def(py::init<const Map&, AStarConfig, ReplanConfig>(), py::arg("map"),
+             py::arg("config") = AStarConfig{}, py::arg("replan_config") = ReplanConfig{},
              py::keep_alive<1, 2>())
-        .def("plan", &PBS::plan, py::arg("agents"))
-        .def("replan", &PBS::replan, py::arg("agents"), py::arg("previous_paths"),
+        .def("plan", &PrioritizedPlanner::plan, py::arg("agents"))
+        .def("replan", &PrioritizedPlanner::replan, py::arg("agents"), py::arg("previous_paths"),
              py::arg("new_obstacles"), py::arg("current_time"))
-        .def("full_replan", &PBS::full_replan, py::arg("agents"), py::arg("previous_paths"),
+        .def("full_replan", &PrioritizedPlanner::full_replan, py::arg("agents"), py::arg("previous_paths"),
              py::arg("new_obstacles"), py::arg("current_time"))
-        .def_static("path_hits_obstacle", &PBS::path_hits_obstacle, py::arg("path"),
+        .def_static("path_hits_obstacle", &PrioritizedPlanner::path_hits_obstacle, py::arg("path"),
                     py::arg("new_obstacles"), py::arg("current_time"));
 }

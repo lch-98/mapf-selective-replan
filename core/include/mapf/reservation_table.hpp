@@ -72,7 +72,7 @@ public:
     // 이미 다른 agent_id가 점유한 칸이면 아무 일도 하지 않고 false를
     // 반환한다 — reserve()와 달리 절대 남의 점유를 덮어쓰지 않는다.
     //
-    // 왜 필요한가: PBS(05장)의 register_path가 Tail Reservation(도착
+    // 왜 필요한가: PrioritizedPlanner(05장)의 register_path가 Tail Reservation(도착
     // 시각부터 max_timestep까지 목적지를 미리 채워두는 것)을 걸 때, 그
     // 범위 안에 이미 다른(더 높은 순위) 로봇이 정당하게 등록해둔 vertex가
     // 있다면 절대 지우면 안 된다. reserve()를 그대로 쓰면 무조건 덮어써서
@@ -85,7 +85,7 @@ public:
     // (x,y,t)의 주인이 정확히 agent_id일 때만 지운다. 주인이 다르거나
     // 점유가 없으면 아무 일도 하지 않는다.
     //
-    // 왜 필요한가: PBS(05장)가 "내 목적지의 임시 선점만 풀겠다"고 할 때,
+    // 왜 필요한가: PrioritizedPlanner(05장)가 "내 목적지의 임시 선점만 풀겠다"고 할 때,
     // 만약 그 칸에 이미 다른 로봇의 Tail Reservation(영구 점유)이 걸려
     // 있다면 unreserve()로는 그것까지 같이 지워버린다 — 그건 잘못이다.
     // 이 함수는 "내가 등록한 것만 정확히 골라서" 지우게 해준다.

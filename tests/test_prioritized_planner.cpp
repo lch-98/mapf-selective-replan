@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────────
-// tests/test_pbs.cpp
+// tests/test_prioritized_planner.cpp
 //
 // 05_pbs.md(plan) + 06_selective_replan.md(replan)에서 설명한 동작을 확인한다.
 // ─────────────────────────────────────────────────────────────────
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <stdexcept>
-#include "mapf/pbs.hpp"
+#include "mapf/prioritized_planner.hpp"
 
 using namespace mapf;
 
@@ -16,7 +16,7 @@ namespace {
 // 맞바꾸기)이 없는지 확인한다. 도착 후에는 목적지에 머문다(Tail)고 본다.
 // 먼저 각 경로의 i번째 칸이 시각 i인지(시각이 건너뛰지 않는지) 확인한다 —
 // 아래 충돌 검사와 position_at, GUI가 모두 이 전제로 위치를 읽기 때문이다.
-void expect_conflict_free(const PBSResult& paths) {
+void expect_conflict_free(const PlanResult& paths) {
     for (const auto& [id, path] : paths) {
         for (size_t i = 0; i < path.size(); ++i) {
             if (path[i].t != static_cast<int>(i)) {
@@ -50,7 +50,7 @@ void expect_conflict_free(const PBSResult& paths) {
 
 }  // namespace
 
-TEST(PBSTest, RejectsAgentWhoseStartCellIsAlreadyOwnedAtThatTime) {
+TEST(PrioritizedPlannerTest, RejectsAgentWhoseStartCellIsAlreadyOwnedAtThatTime) {
     // 3x1 통로: (0,0)-(1,0)-(2,0).
     // 로봇0(1순위): (1,0)->(0,0). t=0에 (1,0)에서 출발해 t=1에 (0,0)으로
     //   이동한다. 목적지가 (0,0)이므로 Tail Reservation도 (0,0)에만 걸리고
@@ -65,51 +65,51 @@ TEST(PBSTest, RejectsAgentWhoseStartCellIsAlreadyOwnedAtThatTime) {
     // 사라지고 plan()이 두 경로를 모두 "성공"으로 반환해버린다 — 그래서
     // 안 된다는 것을 이 테스트가 고정한다.
     Map map(3, 1);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{1, 0}, Cell{0, 0}},
         Agent{1, Cell{1, 0}, Cell{1, 0}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSTest, TwoAgentsWithoutConflictBothGetShortestPaths) {
+TEST(PrioritizedPlannerTest, TwoAgentsWithoutConflictBothGetShortestPaths) {
     // 5x1 통로. 로봇0: (0,0)->(1,0). 로봇1: (4,0)->(3,0). 서로 안 겹친다.
     Map map(5, 1);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{1, 0}},
         Agent{1, Cell{4, 0}, Cell{3, 0}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ((*result)[0].size(), 2u);  // (0,0)->(1,0): t=0,1
     EXPECT_EQ((*result)[1].size(), 2u);  // (4,0)->(3,0): t=0,1
 }
 
-TEST(PBSTest, LowerPriorityAgentDetoursAroundHigherPriority) {
+TEST(PrioritizedPlannerTest, LowerPriorityAgentDetoursAroundHigherPriority) {
     // 3x3 빈 격자. 가운데 행(y=1)이 (0,1)-(1,1)-(2,1)로 통로처럼 뚫려 있지만,
     // 위(y=0)/아래(y=2) 행으로 돌아갈 공간도 있다 — 즉 "비켜설 자리"가 있는 맵.
     //
     // 로봇0(1순위): (0,1)->(2,1) — 가운데 행을 직선으로 가로지른다.
     // 로봇1(2순위): (2,1)->(0,1) — 정면으로 마주치는 경로지만, 위/아래로
-    //   돌아갈 공간이 있으므로 PBS가 충돌 없이 둘 다 성공시켜야 한다.
+    //   돌아갈 공간이 있으므로 PrioritizedPlanner가 충돌 없이 둘 다 성공시켜야 한다.
     Map map(3, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 1}, Cell{2, 1}},
         Agent{1, Cell{2, 1}, Cell{0, 1}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     ASSERT_TRUE(result.has_value());
     // 로봇0은 자유롭게 직선 최단 경로(2턴)를 그대로 가져간다.
@@ -127,65 +127,65 @@ TEST(PBSTest, LowerPriorityAgentDetoursAroundHigherPriority) {
     EXPECT_EQ(path1.back().y, 1);
 }
 
-TEST(PBSTest, FailsWhenAnyAgentIsUnreachable) {
+TEST(PrioritizedPlannerTest, FailsWhenAnyAgentIsUnreachable) {
     Map map({
         "...",
         ".#.",
         "...",
     });
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{1, 1}},  // (1,1)은 사방이 벽 — 도달 불가능
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSTest, DuplicateAgentIdsThrow) {
+TEST(PrioritizedPlannerTest, DuplicateAgentIdsThrow) {
     Map map(3, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{2, 2}},
         Agent{0, Cell{2, 0}, Cell{0, 2}},  // id 0이 중복
     };
 
-    EXPECT_THROW(pbs.plan(agents), std::invalid_argument);
+    EXPECT_THROW(planner.plan(agents), std::invalid_argument);
 }
 
-TEST(PBSTest, EmptyAgentsReturnsEmptySuccessfulResult) {
+TEST(PrioritizedPlannerTest, EmptyAgentsReturnsEmptySuccessfulResult) {
     Map map(3, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
-    auto result = pbs.plan({});
+    auto result = planner.plan({});
 
     ASSERT_TRUE(result.has_value());
     EXPECT_TRUE(result->empty());
 }
 
-TEST(PBSTest, TailReservationProtectsArrivedAgentForever) {
+TEST(PrioritizedPlannerTest, TailReservationProtectsArrivedAgentForever) {
     // 2x1 통로: (0,0)-(1,0).
     // 로봇0(1순위): (1,0)->(1,0) — 제자리. t=0부터 (1,0)을 영원히 점유(Tail).
     // 로봇1(2순위): (0,0)->(1,0) — 로봇0의 목적지로 들어가려 하므로 막혀야 한다
     //   (Tail Reservation이 없으면 로봇0이 떠난 것처럼 보여서 들어갈 수 있다).
     Map map(2, 1);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{1, 0}, Cell{1, 0}},
         Agent{1, Cell{0, 0}, Cell{1, 0}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     // 로봇1은 (1,0)에 영원히 못 들어가므로 전체 계획이 실패해야 한다.
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSTest, FailsWhenHigherPriorityAgentForeverBlocksLowerPriorityGoal) {
+TEST(PrioritizedPlannerTest, FailsWhenHigherPriorityAgentForeverBlocksLowerPriorityGoal) {
     // 3x1 통로: (0,0)-(1,0)-(2,0).
     // 로봇0(1순위): (0,0)->(2,0) — (1,0)을 t=1에 "지나간다"(통로를 끝까지 가야 함).
     // 로봇1(2순위): (1,0)->(1,0) — 제자리. 로봇1의 경로는 "t=0,1,2,...,max까지
@@ -194,19 +194,19 @@ TEST(PBSTest, FailsWhenHigherPriorityAgentForeverBlocksLowerPriorityGoal) {
     //   — 로봇1은 t=1 순간 물리적으로 어딘가 비켜야 하는데, 그런 경로는
     //   계획된 적이 없으므로 전체가 실패해야 한다.
     Map map(3, 1);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{2, 0}},
         Agent{1, Cell{1, 0}, Cell{1, 0}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSTest, LowerPriorityAgentStepsAsideWhenHigherPriorityPassesItsGoal) {
+TEST(PrioritizedPlannerTest, LowerPriorityAgentStepsAsideWhenHigherPriorityPassesItsGoal) {
     // 2x3 격자: (0,*) 세로 통로 + (1,*) 옆 칸.
     // 로봇0(1순위): (0,0)->(0,2) — (0,1)을 t=1에 지나간다.
     // 로봇1(2순위): (0,1)->(0,1) — 제자리. 그대로 머물면 t=1에 로봇0과
@@ -215,11 +215,11 @@ TEST(PBSTest, LowerPriorityAgentStepsAsideWhenHigherPriorityPassesItsGoal) {
     //   경로를 찾아야 한다.
     //   (예전 A*는 t=0에 "이미 도착"으로 끝내서 register_path의 Tail 검사에서
     //   실패했다. 그 Tail 검사가 조용히 무시되지 않는다는 점은 A* 없이 등록되는
-    //   옛 경로로 PBSReplanTest.NonWorkingAgentTailRejectionEscalatesToTier1이
+    //   옛 경로로 SelectiveReplanTest.NonWorkingAgentTailRejectionEscalatesToTier1이
     //   확인한다.)
     // 로봇2(3순위): (1,1)->(1,0).
     Map map(2, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{0, 2}},
@@ -227,7 +227,7 @@ TEST(PBSTest, LowerPriorityAgentStepsAsideWhenHigherPriorityPassesItsGoal) {
         Agent{2, Cell{1, 1}, Cell{1, 0}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     ASSERT_TRUE(result.has_value());
     expect_conflict_free(*result);
@@ -240,24 +240,24 @@ TEST(PBSTest, LowerPriorityAgentStepsAsideWhenHigherPriorityPassesItsGoal) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// 06_selective_replan.md — PBS::replan
+// 06_selective_replan.md — PrioritizedPlanner::replan
 // ───────────────────────────────────────────────────────────────
 
-TEST(PBSReplanTest, NoAffectedAgentsReturnsExistingPathsUnchanged) {
+TEST(SelectiveReplanTest, NoAffectedAgentsReturnsExistingPathsUnchanged) {
     // 5x1 통로. 로봇0의 경로는 (0,0)->(4,0)이고, 장애물은 그 경로가 한 번도
     // 지나가지 않는 칸(y=0이 아닌 곳은 없으니, 대신 같은 행이지만 로봇이
     // 이미 지나가고 한참 지난 과거 시각이 아니라 "전혀 밟지 않는 칸"이
     // 필요하다 — 1x5 통로에는 그런 칸이 없으므로, current_time을 로봇이
     // 도착하기 한참 전으로 두고 장애물을 로봇 경로 밖의 좌표에 둔다).
     Map map(5, 1);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {Agent{0, Cell{0, 0}, Cell{4, 0}}};
-    auto initial = pbs.plan(agents);
+    auto initial = planner.plan(agents);
     ASSERT_TRUE(initial.has_value());
 
     // (10,0)은 맵 밖이라 로봇 경로가 절대 닿지 않는 칸이다.
-    auto result = pbs.replan(agents, *initial, {Cell{10, 0}}, /*current_time=*/0);
+    auto result = planner.replan(agents, *initial, {Cell{10, 0}}, /*current_time=*/0);
 
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->escalation_tier, 0);
@@ -265,19 +265,19 @@ TEST(PBSReplanTest, NoAffectedAgentsReturnsExistingPathsUnchanged) {
     EXPECT_EQ(result->paths.at(0), initial->at(0));
 }
 
-TEST(PBSReplanTest, Tier0SucceedsWhenAffectedAgentCanDetourAlone) {
+TEST(SelectiveReplanTest, Tier0SucceedsWhenAffectedAgentCanDetourAlone) {
     // 3x3 빈 격자. 로봇0(혼자): (0,1)->(2,1) 직선 경로를 받았는데, t=2 이후
     // 가운데 행에 새 장애물(1,1)이 생긴다. 위/아래로 비켜갈 공간이 있고
     // 다른 로봇이 없으므로 Tier 0만으로 충분히 성공해야 한다.
     Map map(3, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {Agent{0, Cell{0, 1}, Cell{2, 1}}};
-    auto initial = pbs.plan(agents);
+    auto initial = planner.plan(agents);
     ASSERT_TRUE(initial.has_value());
     ASSERT_EQ(initial->at(0).back(), (SpaceTimeCell{2, 1, 2}));
 
-    auto result = pbs.replan(agents, *initial, {Cell{1, 1}}, /*current_time=*/0);
+    auto result = planner.replan(agents, *initial, {Cell{1, 1}}, /*current_time=*/0);
 
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->escalation_tier, 0);
@@ -291,7 +291,7 @@ TEST(PBSReplanTest, Tier0SucceedsWhenAffectedAgentCanDetourAlone) {
     }
 }
 
-TEST(PBSReplanTest, Tier1RescuesBlockingAgentWhenAloneDetourImpossible) {
+TEST(SelectiveReplanTest, Tier1RescuesBlockingAgentWhenAloneDetourImpossible) {
     // 4x3 격자.
     // 로봇0(1순위, 영향받은 로봇 R): (0,0)->(3,0). current_time=0에 (1,0),(2,0)에
     //   새 장애물이 생기면 y=1행으로 우회해야 한다:
@@ -310,14 +310,14 @@ TEST(PBSReplanTest, Tier1RescuesBlockingAgentWhenAloneDetourImpossible) {
     // 목적지(1,2)가 R의 경로 밖이므로 A*가 그 시각만 피해 자유롭게 새
     // 경로를 찾을 수 있다.
     Map map(4, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{3, 0}},  // R
         Agent{1, Cell{1, 2}, Cell{1, 2}},  // K
     };
 
-    PBSResult previous_paths;
+    PlanResult previous_paths;
     previous_paths[0] = Path{
         SpaceTimeCell{0, 0, 0},
         SpaceTimeCell{1, 0, 1},
@@ -331,7 +331,7 @@ TEST(PBSReplanTest, Tier1RescuesBlockingAgentWhenAloneDetourImpossible) {
         SpaceTimeCell{1, 2, 3},
     };
 
-    auto result = pbs.replan(agents, previous_paths, {Cell{1, 0}, Cell{2, 0}},
+    auto result = planner.replan(agents, previous_paths, {Cell{1, 0}, Cell{2, 0}},
                               /*current_time=*/0);
 
     ASSERT_TRUE(result.has_value());
@@ -354,7 +354,7 @@ TEST(PBSReplanTest, Tier1RescuesBlockingAgentWhenAloneDetourImpossible) {
     EXPECT_EQ(k_path.back().y, 2);
 }
 
-TEST(PBSReplanTest, FallsBackToFullReplanWhenEscalationCannotResolveConflict) {
+TEST(SelectiveReplanTest, FallsBackToFullReplanWhenEscalationCannotResolveConflict) {
     // 3x1 통로(폭 1, 우회 불가능): (0,0)-(1,0)-(2,0).
     // 로봇0(1순위): (2,0)->(2,0) 제자리, Tail로 (2,0)을 영원히 점유.
     // 로봇1(2순위): (0,0)->(1,0) — 처음엔 K와 안 겹치는 짧은 경로.
@@ -363,21 +363,21 @@ TEST(PBSReplanTest, FallsBackToFullReplanWhenEscalationCannotResolveConflict) {
     // 떨어져야 한다. 안전망도 (1,0)이 막혀 있고 다른 길이 없으므로 결국
     // 전체 실패(nullopt)한다 — "안전망까지 가도 못 풀 수 있다"를 보여준다.
     Map map(3, 1);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{2, 0}, Cell{2, 0}},
         Agent{1, Cell{0, 0}, Cell{1, 0}},
     };
-    auto initial = pbs.plan(agents);
+    auto initial = planner.plan(agents);
     ASSERT_TRUE(initial.has_value());
 
-    auto result = pbs.replan(agents, *initial, {Cell{1, 0}}, /*current_time=*/0);
+    auto result = planner.replan(agents, *initial, {Cell{1, 0}}, /*current_time=*/0);
 
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSReplanTest, FailsEvenAfterFallbackWhenBlockersGoalIsTheOnlyDetour) {
+TEST(SelectiveReplanTest, FailsEvenAfterFallbackWhenBlockersGoalIsTheOnlyDetour) {
     // 2x3 격자: (0,*) 세로 통로 + (1,*) 옆 칸.
     // 로봇0: (1,1)->(1,1) 제자리 — 목적지 자체가 (1,1)이므로 Tail
     //   Reservation으로 (1,1)을 영원히 점유해야 한다(이 보장이 register_path의
@@ -389,22 +389,22 @@ TEST(PBSReplanTest, FailsEvenAfterFallbackWhenBlockersGoalIsTheOnlyDetour) {
     //   충돌이다(06장 6.5절의 한계와 같은 종류). 그래서 Tier 0/1은 물론
     //   안전망(전체 재계획)까지도 실패해야 한다.
     Map map(2, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{1, 1}, Cell{1, 1}},
         Agent{1, Cell{0, 0}, Cell{0, 2}},
     };
-    auto initial = pbs.plan(agents);
+    auto initial = planner.plan(agents);
     ASSERT_TRUE(initial.has_value());
     ASSERT_EQ(initial->at(1).back(), (SpaceTimeCell{0, 2, 2}));
 
-    auto result = pbs.replan(agents, *initial, {Cell{0, 1}}, /*current_time=*/0);
+    auto result = planner.replan(agents, *initial, {Cell{0, 1}}, /*current_time=*/0);
 
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(PBSTest, LowerPriorityTailReservationDoesNotErasePriorAgentVertex) {
+TEST(PrioritizedPlannerTest, LowerPriorityTailReservationDoesNotErasePriorAgentVertex) {
     // 이번엔 로봇1의 목적지를 로봇0의 경로가 전혀 지나가지 않는 칸으로 두어,
     // Tail Reservation이 거절 없이 깨끗하게 등록되는 정상 케이스를 확인한다.
     // 2x3 격자: (0,*) 세로 통로 + (1,*) 옆 칸.
@@ -412,14 +412,14 @@ TEST(PBSTest, LowerPriorityTailReservationDoesNotErasePriorAgentVertex) {
     // 로봇1(2순위): (1,1)->(1,1) — 옆 칸에서 제자리. 로봇0과 칸 자체가 다르므로
     //   Tail Reservation이 전혀 거절되지 않고, 로봇0의 경로도 그대로 유지된다.
     Map map(2, 3);
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{0, 2}},
         Agent{1, Cell{1, 1}, Cell{1, 1}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     ASSERT_TRUE(result.has_value());
     // 로봇0의 경로는 그대로 유지되어야 한다 — 로봇1의 Tail에 침범당하지 않음.
@@ -429,7 +429,7 @@ TEST(PBSTest, LowerPriorityTailReservationDoesNotErasePriorAgentVertex) {
     }
 }
 
-TEST(PBSReplanTest, Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath) {
+TEST(SelectiveReplanTest, Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath) {
     // 5x3 격자:
     //   y=0:  # . . . #
     //   y=1:  . . . . .
@@ -450,14 +450,14 @@ TEST(PBSReplanTest, Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath) {
         ".....",
         "###.#",
     });
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 1}, Cell{4, 1}},  // W
         Agent{1, Cell{3, 1}, Cell{1, 0}},  // N
     };
 
-    PBSResult previous_paths;
+    PlanResult previous_paths;
     previous_paths[0] = Path{
         SpaceTimeCell{0, 1, 0}, SpaceTimeCell{1, 1, 1}, SpaceTimeCell{2, 1, 2},
         SpaceTimeCell{3, 1, 3}, SpaceTimeCell{4, 1, 4},
@@ -467,7 +467,7 @@ TEST(PBSReplanTest, Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath) {
         SpaceTimeCell{1, 0, 3},
     };
 
-    auto result = pbs.replan(agents, previous_paths, {Cell{2, 1}}, /*current_time=*/1);
+    auto result = planner.replan(agents, previous_paths, {Cell{2, 1}}, /*current_time=*/1);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->escalation_tier, 1);
     EXPECT_EQ(result->rescued_ids, std::vector<int>{1});
@@ -490,7 +490,7 @@ TEST(PBSReplanTest, Tier1RescuesUnchangedAgentWhoseOldPathSwapsWithNewPath) {
     }
 }
 
-TEST(PBSTest, LowerPriorityAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal) {
+TEST(PrioritizedPlannerTest, LowerPriorityAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal) {
     // 5x2 격자 (아래 행은 x=2만 열림):
     //   y=0:  . . . . .
     //   y=1:  # # . # #
@@ -502,20 +502,20 @@ TEST(PBSTest, LowerPriorityAgentWaitsInsteadOfArrivingBeforeHigherPriorityPasses
         ".....",
         "##.##",
     });
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{4, 0}},
         Agent{1, Cell{2, 1}, Cell{2, 0}},
     };
 
-    auto result = pbs.plan(agents);
+    auto result = planner.plan(agents);
 
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->at(1).back(), (SpaceTimeCell{2, 0, 3}));
 }
 
-TEST(PBSReplanTest, WorkingAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal) {
+TEST(SelectiveReplanTest, WorkingAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal) {
     // 7x3 격자:
     //   y=0:  . . . . . . .
     //   y=1:  # # # # . . .
@@ -533,14 +533,14 @@ TEST(PBSReplanTest, WorkingAgentWaitsInsteadOfArrivingBeforeHigherPriorityPasses
         "####...",
         "####...",
     });
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{6, 0}},
         Agent{1, Cell{5, 2}, Cell{5, 0}},
     };
 
-    PBSResult previous_paths;
+    PlanResult previous_paths;
     previous_paths[0] = Path{
         SpaceTimeCell{0, 0, 0}, SpaceTimeCell{1, 0, 1}, SpaceTimeCell{2, 0, 2},
         SpaceTimeCell{3, 0, 3}, SpaceTimeCell{4, 0, 4}, SpaceTimeCell{5, 0, 5},
@@ -552,7 +552,7 @@ TEST(PBSReplanTest, WorkingAgentWaitsInsteadOfArrivingBeforeHigherPriorityPasses
         SpaceTimeCell{5, 0, 6},
     };
 
-    auto result = pbs.replan(agents, previous_paths, {Cell{5, 1}}, /*current_time=*/0);
+    auto result = planner.replan(agents, previous_paths, {Cell{5, 1}}, /*current_time=*/0);
 
     ASSERT_TRUE(result.has_value());
     const Path& path1 = result->paths.at(1);
@@ -562,7 +562,7 @@ TEST(PBSReplanTest, WorkingAgentWaitsInsteadOfArrivingBeforeHigherPriorityPasses
     expect_conflict_free(result->paths);
 }
 
-TEST(PBSReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
+TEST(SelectiveReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
     // 7x3 격자:
     //   y=0:  # # # # . # #     ← (4,0)은 N이 비켜설 수 있는 막다른 칸
     //   y=1:  # # # . . . #
@@ -586,14 +586,14 @@ TEST(PBSReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
         "###...#",
         ".......",
     });
-    PBS pbs(map);
+    PrioritizedPlanner planner(map);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 2}, Cell{6, 2}},  // W
         Agent{1, Cell{4, 1}, Cell{4, 1}},  // N
     };
 
-    PBSResult previous_paths;
+    PlanResult previous_paths;
     previous_paths[0] = Path{
         SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
         SpaceTimeCell{3, 2, 3}, SpaceTimeCell{4, 2, 4}, SpaceTimeCell{5, 2, 5},
@@ -601,7 +601,7 @@ TEST(PBSReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
     };
     previous_paths[1] = Path{SpaceTimeCell{4, 1, 0}};
 
-    auto result = pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    auto result = planner.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
 
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->escalation_tier, 1);
@@ -611,7 +611,7 @@ TEST(PBSReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
     EXPECT_EQ(result->paths.at(1).back().y, 1);
 
     // 전체 재계획도 같은 이어붙이기를 쓰므로 똑같이 성립해야 한다.
-    auto full = pbs.full_replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    auto full = planner.full_replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
     ASSERT_TRUE(full.has_value());
     expect_conflict_free(*full);
 }
@@ -620,7 +620,7 @@ TEST(PBSReplanTest, NonWorkingAgentTailRejectionEscalatesToTier1) {
 // 12장 — ReplanOrder::kFixedFirst (고정 로봇 먼저 등록 + 구조 로봇은 뒤에)
 // ───────────────────────────────────────────────────────────────
 
-TEST(PBSReplanTest, FixedFirstKeepsUnchangedAgentAndDetoursWorkingAgentAtTier0) {
+TEST(SelectiveReplanTest, FixedFirstKeepsUnchangedAgentAndDetoursWorkingAgentAtTier0) {
     // Tier1RescuesBlockingAgentWhenAloneDetourImpossible과 같은 시나리오(4x3 격자)를
     // kFixedFirst로 푼다. 원래 방식에서는 R(1순위)이 K를 모른 채 (1,1)을 t=2에 지나가서
     // K(2순위)의 등록이 거절되고 Tier 1로 K를 비키게 했다.
@@ -630,16 +630,16 @@ TEST(PBSReplanTest, FixedFirstKeepsUnchangedAgentAndDetoursWorkingAgentAtTier0) 
     // 그래서 Tier 0에서 끝나고 K의 경로는 그대로다. 대신 R은 t=5가 아니라 t=6에
     // 도착한다 — 우선순위가 높은 R이 낮은 K를 피해 가는 대가(11장 11.6절).
     Map map(4, 3);
-    PBSConfig replan_config;
+    ReplanConfig replan_config;
     replan_config.order = ReplanOrder::kFixedFirst;
-    PBS pbs(map, AStarConfig{}, replan_config);
+    PrioritizedPlanner planner(map, AStarConfig{}, replan_config);
 
     std::vector<Agent> agents = {
         Agent{0, Cell{0, 0}, Cell{3, 0}},  // R
         Agent{1, Cell{1, 2}, Cell{1, 2}},  // K
     };
 
-    PBSResult previous_paths;
+    PlanResult previous_paths;
     previous_paths[0] = Path{
         SpaceTimeCell{0, 0, 0},
         SpaceTimeCell{1, 0, 1},
@@ -653,7 +653,7 @@ TEST(PBSReplanTest, FixedFirstKeepsUnchangedAgentAndDetoursWorkingAgentAtTier0) 
         SpaceTimeCell{1, 2, 3},
     };
 
-    auto result = pbs.replan(agents, previous_paths, {Cell{1, 0}, Cell{2, 0}},
+    auto result = planner.replan(agents, previous_paths, {Cell{1, 0}, Cell{2, 0}},
                               /*current_time=*/0);
 
     ASSERT_TRUE(result.has_value());
@@ -664,7 +664,7 @@ TEST(PBSReplanTest, FixedFirstKeepsUnchangedAgentAndDetoursWorkingAgentAtTier0) 
     expect_conflict_free(result->paths);
 }
 
-TEST(PBSReplanTest, FixedFirstPlansRescuedAgentAfterTheAgentItBlocked) {
+TEST(SelectiveReplanTest, FixedFirstPlansRescuedAgentAfterTheAgentItBlocked) {
     // NonWorkingAgentTailRejectionEscalatesToTier1과 같은 맵이지만 우선순위를 뒤집었다:
     //   y=0:  # # # # . # #     ← (4,0)은 K가 비켜설 수 있는 막다른 칸
     //   y=1:  # # # . . . #
@@ -690,7 +690,7 @@ TEST(PBSReplanTest, FixedFirstPlansRescuedAgentAfterTheAgentItBlocked) {
         Agent{1, Cell{0, 2}, Cell{6, 2}},  // W
     };
 
-    PBSResult previous_paths;
+    PlanResult previous_paths;
     previous_paths[0] = Path{SpaceTimeCell{4, 1, 0}};
     previous_paths[1] = Path{
         SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
@@ -698,14 +698,14 @@ TEST(PBSReplanTest, FixedFirstPlansRescuedAgentAfterTheAgentItBlocked) {
         SpaceTimeCell{6, 2, 6},
     };
 
-    PBS priority_pbs(map);
+    PrioritizedPlanner priority_planner(map);
     EXPECT_FALSE(
-        priority_pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3).has_value());
+        priority_planner.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3).has_value());
 
-    PBSConfig replan_config;
+    ReplanConfig replan_config;
     replan_config.order = ReplanOrder::kFixedFirst;
-    PBS pbs(map, AStarConfig{}, replan_config);
-    auto result = pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    PrioritizedPlanner planner(map, AStarConfig{}, replan_config);
+    auto result = planner.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
 
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->escalation_tier, 1);
@@ -721,26 +721,26 @@ TEST(PBSReplanTest, FixedFirstPlansRescuedAgentAfterTheAgentItBlocked) {
 // 13장 — 도달성 검사(check_reachability) + 최단 경로 기반 구조 후보(kShortestPathConflicts)
 // ───────────────────────────────────────────────────────────────
 
-TEST(PBSReplanTest, ReachabilityCheckFailsAtOnceWhenObstacleCutsTheOnlyRoute) {
+TEST(SelectiveReplanTest, ReachabilityCheckFailsAtOnceWhenObstacleCutsTheOnlyRoute) {
     // 5x1 통로. 로봇0: (0,0)->(4,0). t=0에 (2,0)에 장애물이 생기면 목적지로 가는 길이
     // 완전히 끊긴다. 도달성 검사를 켜면 Tier·안전망을 건너뛰고 바로 실패해야 한다.
     // 결과는 검사를 끈 경우(안전망까지 갔다가 실패)와 같아야 한다 — 전체 재계획도
     // 반드시 실패하는 경우만 일찍 끝내는 것이기 때문이다.
     Map map(5, 1);
     std::vector<Agent> agents = {Agent{0, Cell{0, 0}, Cell{4, 0}}};
-    PBS planner(map);
+    PrioritizedPlanner planner(map);
     auto initial = planner.plan(agents);
     ASSERT_TRUE(initial.has_value());
 
-    PBSConfig with_check;
+    ReplanConfig with_check;
     with_check.check_reachability = true;
-    PBS checked(map, AStarConfig{}, with_check);
+    PrioritizedPlanner checked(map, AStarConfig{}, with_check);
     EXPECT_FALSE(checked.replan(agents, *initial, {Cell{2, 0}}, /*current_time=*/0).has_value());
     EXPECT_FALSE(planner.replan(agents, *initial, {Cell{2, 0}}, /*current_time=*/0).has_value());
     EXPECT_FALSE(planner.full_replan(agents, *initial, {Cell{2, 0}}, /*current_time=*/0).has_value());
 }
 
-TEST(PBSReplanTest, ReachabilityCheckCountsTheTimeLimit) {
+TEST(SelectiveReplanTest, ReachabilityCheckCountsTheTimeLimit) {
     // 3x3 빈 격자. 로봇0: (0,1)->(2,1) 직선(t=2 도착). t=0에 (1,1)에 장애물이 생기면
     // 위나 아래로 돌아가야 해서 가장 빨라도 t=4에 도착한다.
     // max_timestep=3이면 칸으로는 이어져 있어도 시간 안에 못 가므로 실패여야 한다.
@@ -748,17 +748,17 @@ TEST(PBSReplanTest, ReachabilityCheckCountsTheTimeLimit) {
     std::vector<Agent> agents = {Agent{0, Cell{0, 1}, Cell{2, 1}}};
     AStarConfig short_horizon;
     short_horizon.max_timestep = 3;
-    PBSConfig with_check;
+    ReplanConfig with_check;
     with_check.check_reachability = true;
 
-    PBS tight(map, short_horizon, with_check);
+    PrioritizedPlanner tight(map, short_horizon, with_check);
     auto tight_initial = tight.plan(agents);
     ASSERT_TRUE(tight_initial.has_value());
     EXPECT_FALSE(tight.replan(agents, *tight_initial, {Cell{1, 1}}, /*current_time=*/0).has_value());
     EXPECT_FALSE(tight.full_replan(agents, *tight_initial, {Cell{1, 1}}, /*current_time=*/0).has_value());
 
     // 시간이 넉넉하면 같은 상황에서 성공해야 한다 — 검사가 풀 수 있는 경우를 막지 않는다.
-    PBS roomy(map, AStarConfig{}, with_check);
+    PrioritizedPlanner roomy(map, AStarConfig{}, with_check);
     auto roomy_initial = roomy.plan(agents);
     ASSERT_TRUE(roomy_initial.has_value());
     auto result = roomy.replan(agents, *roomy_initial, {Cell{1, 1}}, /*current_time=*/0);
@@ -766,7 +766,7 @@ TEST(PBSReplanTest, ReachabilityCheckCountsTheTimeLimit) {
     EXPECT_EQ(result->paths.at(0).back(), (SpaceTimeCell{2, 1, 4}));
 }
 
-TEST(PBSReplanTest, ShortestPathRescueCallsOnlyAgentsOnTheRoute) {
+TEST(SelectiveReplanTest, ShortestPathRescueCallsOnlyAgentsOnTheRoute) {
     //   y=0:  # # # # . # # #     ← (4,0)은 K가 비켜설 수 있는 막다른 칸
     //   y=1:  . # # . . . # #     ← (0,1)은 Z가 머무는 막다른 칸(W의 길과 무관)
     //   y=2:  . . . . . . . .
@@ -791,7 +791,7 @@ TEST(PBSReplanTest, ShortestPathRescueCallsOnlyAgentsOnTheRoute) {
         Agent{2, Cell{0, 1}, Cell{0, 1}},  // Z
     };
 
-    PBSResult previous_paths;
+    PlanResult previous_paths;
     previous_paths[0] = Path{SpaceTimeCell{4, 1, 0}};
     previous_paths[1] = Path{
         SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
@@ -800,20 +800,20 @@ TEST(PBSReplanTest, ShortestPathRescueCallsOnlyAgentsOnTheRoute) {
     };
     previous_paths[2] = Path{SpaceTimeCell{0, 1, 0}};
 
-    PBSConfig coarse_config;
+    ReplanConfig coarse_config;
     coarse_config.order = ReplanOrder::kFixedFirst;
-    PBS coarse_pbs(map, AStarConfig{}, coarse_config);
-    auto coarse = coarse_pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    PrioritizedPlanner coarse_planner(map, AStarConfig{}, coarse_config);
+    auto coarse = coarse_planner.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
     ASSERT_TRUE(coarse.has_value());
     EXPECT_EQ(coarse->escalation_tier, 1);
     EXPECT_NE(std::find(coarse->rescued_ids.begin(), coarse->rescued_ids.end(), 2),
               coarse->rescued_ids.end());  // 상관없는 Z까지 끌려온다
     expect_conflict_free(coarse->paths);
 
-    PBSConfig precise_config = coarse_config;
+    ReplanConfig precise_config = coarse_config;
     precise_config.rescue_selection = RescueSelection::kShortestPathConflicts;
-    PBS precise_pbs(map, AStarConfig{}, precise_config);
-    auto precise = precise_pbs.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+    PrioritizedPlanner precise_planner(map, AStarConfig{}, precise_config);
+    auto precise = precise_planner.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
     ASSERT_TRUE(precise.has_value());
     EXPECT_EQ(precise->escalation_tier, 1);
     EXPECT_EQ(precise->rescued_ids, std::vector<int>{0});  // K만

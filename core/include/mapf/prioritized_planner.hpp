@@ -1,11 +1,15 @@
 // ─────────────────────────────────────────────────────────────────
-// core/include/mapf/pbs.hpp
+// core/include/mapf/prioritized_planner.hpp
 //
 // 05_pbs.md(plan) + 06_selective_replan.md(replan)를 코드로 옮긴 파일.
 //
-// PBS(Priority-Based Search)의 핵심 규칙: 먼저 계획된 로봇의 경로는 절대
-// 바뀌지 않는다. 나중에 계획되는 로봇이 그 경로를 피해서 자기 길을 찾는다.
+// 고정 우선순위 계획(Prioritized Planning, PP)의 핵심 규칙: 먼저 계획된 로봇의 경로는
+// 절대 바뀌지 않는다. 나중에 계획되는 로봇이 그 경로를 피해서 자기 길을 찾는다.
 // 우선순위는 agents 벡터의 순서 그대로다(02장 2.5절).
+//
+// 이름 안내: 예전 이름은 PBS였다. 순서를 바꿔 가며 탐색하는 PBS(Ma et al., 2019)와
+// 달리 순서를 고정하므로 PrioritizedPlanner로 바꿨다(10장 10.2절). 05장 문서의
+// "PBS"는 이 클래스를 가리킨다.
 // ─────────────────────────────────────────────────────────────────
 #pragma once
 
@@ -21,7 +25,7 @@
 namespace mapf {
 
 // 로봇id → 경로.
-using PBSResult = std::unordered_map<int, Path>;
+using PlanResult = std::unordered_map<int, Path>;
 
 // replan()의 한 번의 시도(try_replan_set)에서 로봇을 어떤 순서로 등록할지(12장).
 enum class ReplanOrder {
@@ -48,8 +52,8 @@ enum class RescueSelection {
     kShortestPathConflicts,
 };
 
-// PBS::replan의 동작을 조정하는 설정.
-struct PBSConfig {
+// PrioritizedPlanner::replan의 동작을 조정하는 설정.
+struct ReplanConfig {
     // Tier 1 이후, "막은 원인 로봇"을 몇 단계까지 추적해서 working_ids를
     // 넓혀볼지(06장 6.6절). 0이면 Tier 0만 시도하고 바로 안전망으로 간다.
     int max_escalation_tiers{1};
@@ -71,24 +75,24 @@ struct PBSConfig {
 // replan() 한 번의 결과 — 최종 경로 외에, "얼마나 선택적으로 풀렸는지"를
 // 보여주는 디버깅·연구용 정보를 함께 담는다(06장 6.7절).
 struct ReplanResult {
-    PBSResult paths;                  // 최종 전체 경로(영향 안 받은 로봇은 기존 경로 그대로)
+    PlanResult paths;                  // 최종 전체 경로(영향 안 받은 로봇은 기존 경로 그대로)
     std::vector<int> replanned_ids;    // 실제로 다시 탐색된 로봇 id 전부
     int escalation_tier{0};            // 0=Tier 0에서 끝남, 1+=그 단계까지 확장해서 성공, -1=전체 재계획 폴백
     std::vector<int> rescued_ids{};    // Tier 1+에서 새로 추가된 "구조 로봇" id 목록
 };
 
-class PBS {
+class PrioritizedPlanner {
 public:
-    PBS(const Map& map, AStarConfig config = AStarConfig{}, PBSConfig replan_config = PBSConfig{});
+    PrioritizedPlanner(const Map& map, AStarConfig config = AStarConfig{}, ReplanConfig replan_config = ReplanConfig{});
 
     // agents를 순서대로(=우선순위 순으로) 전부 계획한다.
     // 한 로봇이라도 경로를 못 찾으면 전체가 실패(nullopt)한다.
     // agents에 중복된 id가 있으면 std::invalid_argument를 던진다 — 같은 id로
     // 등록되면 서로의 점유를 "내 것"으로 오인해 충돌을 못 잡고, result에서도
     // 한쪽 경로가 덮어써져 사라지는 잘못된 결과가 조용히 나온다.
-    // agents가 빈 벡터이면 계획할 로봇이 없으므로 빈 PBSResult를 성공으로
+    // agents가 빈 벡터이면 계획할 로봇이 없으므로 빈 PlanResult를 성공으로
     // 반환한다(실패가 아니다).
-    std::optional<PBSResult> plan(const std::vector<Agent>& agents);
+    std::optional<PlanResult> plan(const std::vector<Agent>& agents);
 
     // 이미 진행 중인 계획(previous_paths)에 new_obstacles가 새로 생겼을 때,
     // 영향받은 로봇만 선택적으로 다시 계획한다(06장). 기본(ReplanOrder::kPriority)
@@ -99,7 +103,7 @@ public:
     // 추적해서 확장) → 안전망(전체 재계획, 현재 위치 기준)을 순서대로 시도한다.
     // 안전망까지도 실패하면 nullopt를 반환한다.
     std::optional<ReplanResult> replan(const std::vector<Agent>& agents,
-                                        const PBSResult& previous_paths,
+                                        const PlanResult& previous_paths,
                                         const std::vector<Cell>& new_obstacles,
                                         int current_time);
 
@@ -111,8 +115,8 @@ public:
     // 벤치마크에서 "전체 재계획 베이스라인"을 만들 때 쓴다 — replan()의
     // 선택적 재계획과 공정하게 비교하려면, 베이스라인도 "맨 처음 출발점"이
     // 아니라 "지금 로봇이 있는 위치"부터 다시 계획해야 하기 때문이다.
-    std::optional<PBSResult> full_replan(const std::vector<Agent>& agents,
-                                          const PBSResult& previous_paths,
+    std::optional<PlanResult> full_replan(const std::vector<Agent>& agents,
+                                          const PlanResult& previous_paths,
                                           const std::vector<Cell>& new_obstacles,
                                           int current_time);
 
@@ -124,7 +128,7 @@ public:
     // 이 로봇의 기존 경로를 막는가"를 replan()/full_replan()을 호출하기
     // *전에* 직접 확인할 수 있어야 하기 때문이다 — 그래야 "장애물이 실제로는
     // 아무도 안 막는, 사실상 의미 없는 시나리오"를 비교 대상에서 걸러낼 수
-    // 있다. PBS 내부 판별 로직과 별도로 복제해서 만들면 나중에 한쪽만 바뀌어
+    // 있다. PrioritizedPlanner 내부 판별 로직과 별도로 복제해서 만들면 나중에 한쪽만 바뀌어
     // 기준이 어긋날 위험이 있으므로, 실제로 쓰는 그 함수를 그대로 공유한다.
     static bool path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
                                     int current_time);
@@ -156,7 +160,7 @@ private:
     // 장벽으로 등록한다(06장 6.4절 2단계, 6.6.1절 "구조 로봇의 과거 경로를 장벽으로
     // 쓰면 안 된다"). 처리 순서는 replan_config_.order가 정한다(ReplanOrder 참고).
     //
-    // 성공하면 새 PBSResult를 반환한다(영향 안 받은 로봇=기존 경로, working_ids
+    // 성공하면 새 PlanResult를 반환한다(영향 안 받은 로봇=기존 경로, working_ids
     // 로봇=새로 찾은 경로를 과거 구간과 이어붙인 것). 실패하면 nullopt를 반환하고,
     // 실패 원인을 두 채널 중 하나로 알려준다(06장 6.6절의 get_owner 추적을
     // 가능하게 하는 정보):
@@ -169,8 +173,8 @@ private:
     //     "누가 막았는지"가 아니라 "이 로봇이 막혔다"는 사실 자체가 추적
     //     대상이다 — 거절된 칸의 현재 주인은 이미 working_ids에 있는 로봇이라
     //     get_owner로는 새 후보를 찾을 수 없기 때문이다.
-    std::optional<PBSResult> try_replan_set(const std::vector<Agent>& agents,
-                                             const PBSResult& previous_paths,
+    std::optional<PlanResult> try_replan_set(const std::vector<Agent>& agents,
+                                             const PlanResult& previous_paths,
                                              const std::vector<int>& working_ids,
                                              const std::vector<Cell>& new_obstacles,
                                              int current_time,
@@ -188,7 +192,7 @@ private:
 
     const Map& map_;
     AStarConfig config_;
-    PBSConfig replan_config_;
+    ReplanConfig replan_config_;
     ReservationTable table_;
 };
 

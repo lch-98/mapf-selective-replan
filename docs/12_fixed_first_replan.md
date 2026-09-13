@@ -1,8 +1,8 @@
 # 12. 고정 로봇 먼저 등록(fixed-first) — 구현과 비교 실험
 
 > 작성: 2026-09-13. 10장 문제 1과 11장 아이디어 1을 함께 구현하고, 원래 방식과 **같은
-> 시나리오**에서 비교했다. 대상 코드: `core/include/mapf/pbs.hpp`(`ReplanOrder`),
-> `core/src/pbs.cpp`(`try_replan_set`), `tools/benchmark.cpp`(`--order`, 경로 품질 컬럼).
+> 시나리오**에서 비교했다. 대상 코드: `core/include/mapf/prioritized_planner.hpp`(`ReplanOrder`),
+> `core/src/prioritized_planner.cpp`(`try_replan_set`), `tools/benchmark.cpp`(`--order`, 경로 품질 컬럼).
 
 ---
 
@@ -19,14 +19,14 @@
 
 ## 12.1 무엇을 바꿨나
 
-### 설정 하나 추가 (`pbs.hpp`)
+### 설정 하나 추가 (`prioritized_planner.hpp`)
 
 ```cpp
 enum class ReplanOrder {
     kPriority,    // 원래 방식: agents 순서대로 고정/재계획 로봇을 섞어서 처리
     kFixedFirst,  // 고정 로봇 먼저 → 처음 영향받은 로봇 → 구조 로봇(불려 온 순서)
 };
-struct PBSConfig {
+struct ReplanConfig {
     int max_escalation_tiers{1};
     ReplanOrder order{ReplanOrder::kPriority};  // 기본값은 원래 방식 그대로
 };
@@ -54,7 +54,7 @@ kFixedFirst: order = [고정 로봇들 (agents 순서)] + [working_ids 순서]
 - 안전망(`full_replan`)은 바꾸지 않았다(항상 `agents` 순서). 비교 기준이 흔들리지 않게 하려는 것이다.
 - 결과 경로는 여전히 전부 `register_path`를 통과한다(10.3절의 안전성 조건 유지).
 
-### 테스트 2개 추가 (`tests/test_pbs.cpp`)
+### 테스트 2개 추가 (`tests/test_prioritized_planner.cpp`)
 
 | 테스트 | 확인하는 것 |
 |---|---|

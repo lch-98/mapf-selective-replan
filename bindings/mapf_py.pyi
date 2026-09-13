@@ -5,7 +5,7 @@
 # IDE가 자동완성/타입 힌트를 보여줄 수 있도록 이 스텁 파일을 둔다.
 # 실제 동작은 전부 bindings/mapf_bindings.cpp -> core/include/mapf/*.hpp를
 # 참고할 것. 이 파일은 "무엇을 어떻게 호출할 수 있는지"만 설명하고,
-# 알고리즘 자체의 동작(Tier 0/1/안전망 등)은 core/include/mapf/pbs.hpp의
+# 알고리즘 자체의 동작(Tier 0/1/안전망 등)은 core/include/mapf/prioritized_planner.hpp의
 # 주석과 docs/05_pbs.md, docs/06_selective_replan.md를 참고해야 한다.
 # ─────────────────────────────────────────────────────────────────
 from typing import Dict, List, Optional, overload
@@ -42,14 +42,14 @@ class SpaceTimeCell:
 # path[0]이 출발 시각의 위치다.
 Path = List[SpaceTimeCell]
 
-# 로봇 id -> 그 로봇의 경로. PBS.plan()/full_replan()의 반환값이자
-# PBS.replan()/full_replan()이 받는 previous_paths의 타입이기도 하다.
+# 로봇 id -> 그 로봇의 경로. PrioritizedPlanner.plan()/full_replan()의 반환값이자
+# PrioritizedPlanner.replan()/full_replan()이 받는 previous_paths의 타입이기도 하다.
 # 커스텀 바인딩된 클래스가 아니라 순수 파이썬 dict다(pybind11/stl.h의
 # 제네릭 map/vector 변환).
-PBSResult = Dict[int, Path]
+PlanResult = Dict[int, Path]
 
 class Agent:
-    """로봇 한 대. 우선순위는 필드가 아니라, PBS에 넘기는 리스트 안에서의
+    """로봇 한 대. 우선순위는 필드가 아니라, PrioritizedPlanner에 넘기는 리스트 안에서의
     "순서"로 정해진다 — 리스트 앞쪽일수록 우선순위가 높다."""
 
     id: int
@@ -61,7 +61,7 @@ class Agent:
 
 class Map:
     """격자 전체(가로x세로 크기 + 어느 칸이 벽인지). 동적 장애물(다른
-    로봇 등 시간에 따라 막히는 것)은 다루지 않는다 — 그건 PBS 내부의
+    로봇 등 시간에 따라 막히는 것)은 다루지 않는다 — 그건 PrioritizedPlanner 내부의
     ReservationTable 책임이다."""
 
     @overload
@@ -86,24 +86,24 @@ class Map:
         ...
 
 class AStarConfig:
-    """SpaceTimeAStar 탐색의 설정. PBS 생성자에 선택적으로 넘긴다."""
+    """SpaceTimeAStar 탐색의 설정. PrioritizedPlanner 생성자에 선택적으로 넘긴다."""
 
     max_timestep: int  # 기본값 256. 이 시각을 넘으면 탐색을 포기한다.
 
     def __init__(self) -> None: ...
 
-class PBSConfig:
-    """PBS.replan()의 계층적 확장(Tiered Escalation) 설정."""
+class ReplanConfig:
+    """PrioritizedPlanner.replan()의 계층적 확장(Tiered Escalation) 설정."""
 
     max_escalation_tiers: int  # 기본값 1. Tier 1 이후 몇 단계까지 확장할지.
 
     def __init__(self) -> None: ...
 
 class ReplanResult:
-    """PBS.replan() 한 번의 결과. 최종 경로 외에 "얼마나 선택적으로
+    """PrioritizedPlanner.replan() 한 번의 결과. 최종 경로 외에 "얼마나 선택적으로
     풀렸는지"를 보여주는 디버깅·연구용 정보를 함께 담는다."""
 
-    paths: PBSResult
+    paths: PlanResult
     """최종 전체 경로. 영향 안 받은 로봇은 기존 경로 그대로."""
 
     replanned_ids: List[int]
@@ -117,22 +117,23 @@ class ReplanResult:
     """Tier 1+에서 새로 추가된 "구조 로봇" id 목록. 비어있으면 Tier 0만으로
     충분했다는 뜻."""
 
-class PBS:
-    """Priority-Based Search. 우선순위는 agents 리스트의 순서 그대로다."""
+class PrioritizedPlanner:
+    """고정 우선순위 계획(Prioritized Planning, PP). 우선순위는 agents 리스트의 순서
+    그대로다. 예전 이름은 PBS였다(순서를 탐색하는 진짜 PBS와 달라서 이름을 바꿈)."""
 
     def __init__(
         self,
         map: Map,
         config: AStarConfig = ...,
-        replan_config: PBSConfig = ...,
+        replan_config: ReplanConfig = ...,
     ) -> None:
-        """주의: 이 PBS 객체는 map을 참조로 저장한다(복사가 아님). map
-        객체가 살아있는 동안만 이 PBS 객체를 안전하게 쓸 수 있다 —
+        """주의: 이 PrioritizedPlanner 객체는 map을 참조로 저장한다(복사가 아님). map
+        객체가 살아있는 동안만 이 PrioritizedPlanner 객체를 안전하게 쓸 수 있다 —
         pybind11의 keep_alive로 파이썬 GC가 map을 먼저 수거하지 못하도록
         막아뒀으므로 일반적인 사용에서는 신경 쓸 필요 없다."""
         ...
 
-    def plan(self, agents: List[Agent]) -> Optional[PBSResult]:
+    def plan(self, agents: List[Agent]) -> Optional[PlanResult]:
         """agents를 순서대로(=우선순위 순으로) 전부 계획한다. 한 로봇이라도
         경로를 못 찾으면 None을 반환한다. agents에 중복 id가 있으면
         ValueError. agents가 빈 리스트면 빈 dict를 성공으로 반환한다."""
@@ -141,7 +142,7 @@ class PBS:
     def replan(
         self,
         agents: List[Agent],
-        previous_paths: PBSResult,
+        previous_paths: PlanResult,
         new_obstacles: List[Cell],
         current_time: int,
     ) -> Optional[ReplanResult]:
@@ -155,10 +156,10 @@ class PBS:
     def full_replan(
         self,
         agents: List[Agent],
-        previous_paths: PBSResult,
+        previous_paths: PlanResult,
         new_obstacles: List[Cell],
         current_time: int,
-    ) -> Optional[PBSResult]:
+    ) -> Optional[PlanResult]:
         """"현재 위치 기준 전체 재계획" — replan()이 안전망으로 쓰는 것과
         동일한 로직. working_ids 구분 없이 agents 전체를, current_time
         시점 위치를 새 출발점으로 삼아 처음부터 다시 계획한다(이미 지나온

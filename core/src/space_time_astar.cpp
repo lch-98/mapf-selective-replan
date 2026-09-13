@@ -75,7 +75,7 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal,
                                                      int start_time) const {
     AStarResult result;
 
-    // 목적지가 마지막으로 예약된 시각. PBS는 경로를 "도착 후 목적지에 영원히
+    // 목적지가 마지막으로 예약된 시각. PrioritizedPlanner는 경로를 "도착 후 목적지에 영원히
     // 머문다"(Tail Reservation)고 보고 등록하므로, 이 시각보다 뒤에 도착해야만
     // 끝까지 머물 수 있다. 도착 순간에 멈추고 이걸 안 보면, 나중에 누가 목적지를
     // 지나갈 때 "기다렸다 늦게 도착하면 풀리는" 경우에도 등록 단계에서 실패한다.

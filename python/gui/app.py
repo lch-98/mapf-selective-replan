@@ -254,9 +254,9 @@ class App:
         prev_full = self.full_side.paths
         prev_sel = self.selective_side.paths
 
-        pbs_full = mapf_py.PBS(self.game_map)
+        planner_full = mapf_py.PrioritizedPlanner(self.game_map)
         t0 = time.perf_counter()
-        full_result = pbs_full.full_replan(self.agents, prev_full, self.obstacles, current_time)
+        full_result = planner_full.full_replan(self.agents, prev_full, self.obstacles, current_time)
         full_elapsed = (time.perf_counter() - t0) * 1000.0
 
         self.full_side.ok = full_result is not None
@@ -267,9 +267,9 @@ class App:
         )
         self.full_side.note = "" if full_result is not None else "(재계획 실패 — 로봇이 현재 위치에 멈춘 상태로 표시됨)"
 
-        pbs_sel = mapf_py.PBS(self.game_map)
+        planner_sel = mapf_py.PrioritizedPlanner(self.game_map)
         t0 = time.perf_counter()
-        sel_result = pbs_sel.replan(self.agents, prev_sel, self.obstacles, current_time)
+        sel_result = planner_sel.replan(self.agents, prev_sel, self.obstacles, current_time)
         sel_elapsed = (time.perf_counter() - t0) * 1000.0
 
         self.selective_side.ok = sel_result is not None
@@ -291,7 +291,7 @@ class App:
             if not side.ok:
                 continue
             any_hit = any(
-                mapf_py.PBS.path_hits_obstacle(prev[a.id], self.obstacles, current_time)
+                mapf_py.PrioritizedPlanner.path_hits_obstacle(prev[a.id], self.obstacles, current_time)
                 for a in self.agents
             )
             if not any_hit:
