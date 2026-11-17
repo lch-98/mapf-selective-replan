@@ -23,20 +23,32 @@ int manhattan_distance(Cell a, Cell b) {
 // 대기(wait)도 한 턴을 쓰므로 이동과 똑같이 g에 +1된다 — "칸 수"가 아니라
 // "시간(비용)"이 g의 정확한 의미다.
 // parent로 부모 노드를 가리켜서, goal에 도착했을 때 경로를 거슬러 올라간다.
+// order는 이 노드를 큐에 넣은 순서 번호다(0, 1, 2, ...). 동점 처리에 쓴다(아래 NodeCompare).
 struct Node {
     SpaceTimeCell cell;
     int g;
     int h;
     std::shared_ptr<Node> parent;
+    unsigned long long order;
 
     int f() const { return g + h; }
 };
 
+// 꺼내는 순서(18장 18.5):
+//   1순위: f가 작은 것
+//   2순위: f가 같으면 g가 큰 것 — 출발부터 많이 와서 남은 거리(h)가 짧은 쪽. 목적지 쪽으로 곧장
+//          파고들어서, 성공할 때 확인하는 상태가 줄어든다(A*에서 흔히 쓰는 규칙)
+//   3순위: 그것도 같으면 먼저 넣은 것
+// 3순위까지 정하면 꺼내는 순서가 우선순위 큐 내부 배열 모양과 상관없이 정해진다. f만 비교하면 f가
+// 같은 노드끼리는 배열 모양에 따라 아무거나 나와서, 노드를 넣는 양만 달라져도(18장 2-2단계) 길이가
+// 같은 다른 경로가 뽑힐 수 있다. 그러면 "결과가 같다"를 칸마다 비교로 확인할 수 없다.
 struct NodeCompare {
-    // 우선순위 큐는 "가장 큰 것"을 꺼내므로, f가 작을수록 먼저 나오게 하려면
-    // 비교를 뒤집어야 한다(>를 쓰면 작은 f가 위로 올라온다) 즉, 오름차순 top()이 가장 작은 값을 가짐
+    // 우선순위 큐는 "가장 큰 것"을 꺼내므로, 먼저 꺼내야 하는 쪽이 "작다"가 되도록 뒤집어서 쓴다:
+    // a가 b보다 나중에 나와야 하면 true.
     bool operator()(const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) const {
-        return a->f() > b->f();
+        if (a->f() != b->f()) return a->f() > b->f();
+        if (a->g != b->g) return a->g < b->g;
+        return a->order > b->order;
     }
 };
 
@@ -102,11 +114,14 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
     std::priority_queue<std::shared_ptr<Node>, std::vector<std::shared_ptr<Node>>, NodeCompare> open;
     std::unordered_set<SpaceTimeCell, VisitedHash> visited;
 
+    unsigned long long next_order = 0;  // 큐에 넣은 순서 번호(동점 처리 3순위)
+
     auto start_node = std::make_shared<Node>();
     start_node->cell = SpaceTimeCell{start.x, start.y, start_time};
     start_node->g = 0;
     start_node->h = manhattan_distance(start, goal);
     start_node->parent = nullptr;
+    start_node->order = next_order++;
     open.push(start_node);
 
     while (!open.empty()) {
@@ -115,6 +130,7 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
 
         if (visited.count(current->cell)) continue;
         visited.insert(current->cell);
+        ++result.expanded;
 
         Cell current_xy{current->cell.x, current->cell.y};
         if (current_xy == goal) {
@@ -166,6 +182,7 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
             next_node->g = current->g + 1;
             next_node->h = manhattan_distance(next_xy, goal);
             next_node->parent = current;
+            next_node->order = next_order++;
             open.push(next_node);
         }
     }

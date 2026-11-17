@@ -28,6 +28,10 @@ struct AStarConfig {
 struct AStarResult {
     std::optional<Path> path;
     std::vector<SpaceTimeCell> blocked_attempts;
+
+    // 실제로 꺼내서 확인한 (칸, 시각) 상태 수(18장). 이미 확인한 상태라 건너뛴 것은 세지 않는다.
+    // 탐색이 얼마나 일했는지 재고 테스트하는 데 쓴다.
+    int expanded{0};
 };
 
 // 로봇 한 대의 경로를 찾는 시공간 A*. 이 엔진은 로봇이 몇 대 있는지,

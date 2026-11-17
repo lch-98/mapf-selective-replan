@@ -182,3 +182,55 @@ TEST(SpaceTimeAStarTest, ServiceTimeFailsAtOnceWhenGoalFreesTooLate) {
     EXPECT_FALSE(long_task.path.has_value());
     EXPECT_EQ(long_task.blocked_attempts, (std::vector<SpaceTimeCell>{SpaceTimeCell{2, 0, 3}}));
 }
+
+// ───────────────────────────────────────────────────────────────
+// 18장 2-1단계 — 동점 처리 규칙(f → g가 큰 쪽 → 먼저 넣은 쪽)과 expanded
+// ───────────────────────────────────────────────────────────────
+
+TEST(SpaceTimeAStarTest, TieBreakGoesStraightAndIsFixed) {
+    // 빈 3x3 맵에서 (0,0) → (2,2)는 길이 4인 최단 경로가 여러 개다(f가 같은 노드가 많다).
+    // 규칙대로면:
+    //   - f가 같으면 g가 큰 쪽(목적지에 더 가까운 쪽)을 먼저 → 기다리기·되돌아가기 없이 곧장 간다
+    //   - g도 같으면 먼저 넣은 쪽 → 이웃을 "제자리, 오른쪽, 왼쪽, 아래, 위" 순서로 넣으므로 오른쪽이 먼저
+    // 그래서 항상 (0,0) (1,0) (2,0) (2,1) (2,2)가 나오고, 확인하는 상태는 이 5개뿐이다.
+    Map map(3, 3);
+    ReservationTable reservations;
+    SpaceTimeAStar astar(map, reservations);
+
+    AStarResult result = astar.search_with_diagnostics(Cell{0, 0}, Cell{2, 2});
+
+    ASSERT_TRUE(result.path.has_value());
+    EXPECT_EQ(*result.path, (Path{SpaceTimeCell{0, 0, 0}, SpaceTimeCell{1, 0, 1},
+                                  SpaceTimeCell{2, 0, 2}, SpaceTimeCell{2, 1, 3},
+                                  SpaceTimeCell{2, 2, 4}}));
+    EXPECT_EQ(result.expanded, 5);
+
+    // 같은 입력이면 몇 번을 돌려도 같은 경로다.
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(astar.search(Cell{0, 0}, Cell{2, 2}), result.path);
+    }
+}
+
+TEST(SpaceTimeAStarTest, ExpandedCountsEveryStateCheckedBeforeFailing) {
+    // 1x3 통로에서 목적지 (2,0)이 t1부터 끝까지 막혀 있다(다른 로봇이 이미 도착해 머묾).
+    // 목적지가 끝까지 막혀 있으면 탐색 없이 바로 실패하므로 확인한 상태는 0개다.
+    Map map(3, 1);
+    ReservationTable reservations;
+    AStarConfig config;
+    config.max_timestep = 10;
+    for (int t = 1; t <= config.max_timestep; ++t) reservations.reserve(2, 0, t, /*agent_id=*/7);
+    SpaceTimeAStar astar(map, reservations, config);
+
+    AStarResult blocked_goal = astar.search_with_diagnostics(Cell{0, 0}, Cell{2, 0});
+    EXPECT_FALSE(blocked_goal.path.has_value());
+    EXPECT_EQ(blocked_goal.expanded, 0);
+
+    // 목적지는 비어 있지만 가는 길 (1,0)이 끝까지 막혀 있으면, 출발 칸 (0,0)에서 t0~t10을
+    // 전부 확인한 뒤에야 실패한다 → 11개.
+    ReservationTable wall_robot;
+    for (int t = 0; t <= config.max_timestep; ++t) wall_robot.reserve(1, 0, t, /*agent_id=*/7);
+    SpaceTimeAStar walled(map, wall_robot, config);
+    AStarResult stuck = walled.search_with_diagnostics(Cell{0, 0}, Cell{2, 0});
+    EXPECT_FALSE(stuck.path.has_value());
+    EXPECT_EQ(stuck.expanded, 11);
+}
