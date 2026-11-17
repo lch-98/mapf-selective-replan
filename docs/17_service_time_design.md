@@ -244,9 +244,19 @@ T에 아직 도착 전(이동 중)이던 로봇:  새 경로에서 다시 계산
 
 ### 결정 10. 함수 모양(API)
 
+> **구현하며 바꾼 점 (2026-11-17)**: 근무표 함수들은 `PrioritizedPlanner` 안이 아니라 별도 파일
+> `core/include/mapf/task_schedule.hpp`에 두었다. 근무표는 "누가 언제 작업하나"만 다루는 독립된
+> 개념이라 따로 두면 읽기 쉽고, 플래너 없이 따로 테스트할 수 있다. 경로 하나에서 작업 구간을 읽는
+> `window_from_path`와 상태 판정 `task_state_at`도 같이 두었다. `window_from_path`는 경로 끝의
+> (작업 시간 + 1)개 칸이 전부 목적지인지 확인하고, 아니면 에러를 낸다(결정 3의 실수를 막는 안전장치).
+
 ```cpp
-// 처음 계획의 결과에서 작업 일정을 만든다: end = 경로 끝, start = end − 작업 시간
-static TaskSchedule schedule_from_plan(const std::vector<Agent>& agents, const PlanResult& paths);
+// task_schedule.hpp
+TaskState    task_state_at(const TaskWindow& window, int t);         // 이동 중 / 작업 중 / 주차 중
+TaskWindow   window_from_path(const Agent& agent, const Path& path);  // end = 경로 끝, start = end − 작업 시간
+
+// 처음 계획의 결과에서 작업 일정을 만든다
+TaskSchedule schedule_from_plan(const std::vector<Agent>& agents, const PlanResult& paths);
 
 // 재계획 — 작업 일정을 받는 새 버전
 std::optional<ReplanResult> replan(agents, previous_paths, previous_schedule, new_obstacles, current_time);
@@ -257,8 +267,8 @@ std::optional<PlanResult>   full_replan(agents, previous_paths, previous_schedul
 std::optional<ReplanResult> replan(agents, previous_paths, new_obstacles, current_time);
 std::optional<PlanResult>   full_replan(agents, previous_paths, new_obstacles, current_time);
 
-// 결정 9의 규칙. replan 안에서도 쓰고, full_replan 결과에 대해 밖에서도 쓴다.
-static TaskSchedule update_schedule(agents, previous_schedule, new_paths, current_time);
+// 결정 9의 규칙(task_schedule.hpp). replan 안에서도 쓰고, full_replan 결과에 대해 밖에서도 쓴다.
+TaskSchedule update_schedule(agents, previous_schedule, new_paths, current_time);
 
 struct ReplanResult {
     ...(지금과 같음)...
@@ -322,7 +332,8 @@ Tier 1에서 W의 A\*는 K의 작업을 모르고 t5에 (4,1)을 지나간다. �
 |---|---|
 | `core/include/mapf/agent.hpp` | `Agent::service_time` 추가 |
 | `core/include/mapf/space_time_astar.hpp/.cpp` | `search`/`search_with_diagnostics`에 `service_time` 인자(기본 0). 도착 조건과 바로 실패 조건에 반영. 도착하면 작업 칸을 붙여서 반환 |
-| `core/include/mapf/prioritized_planner.hpp` | `TaskWindow`, `TaskSchedule`, `ReplanResult::schedule`, 새 `replan`/`full_replan`, `schedule_from_plan`, `update_schedule` |
+| `core/include/mapf/task_schedule.hpp/.cpp` (새 파일) | `TaskWindow`, `TaskSchedule`, `TaskState`, `task_state_at`, `window_from_path`, `schedule_from_plan`, `update_schedule` |
+| `core/include/mapf/prioritized_planner.hpp` | `ReplanResult::schedule`, 새 `replan`/`full_replan` |
 | `core/src/prioritized_planner.cpp` | `plan`: A\*에 작업 시간 전달. 새 도우미 `reserve_ongoing_tasks`(결정 5). `try_replan_set`·`full_replan`: 로봇마다 출발 시각·남은 작업 시간(결정 6). 도달성 검사(결정 8). 옛 버전 함수는 검사 후 새 버전 호출 |
 | `tests/test_prioritized_planner.cpp` (+ A\* 테스트) | 새 테스트(17.8) |
 | `bindings/mapf_bindings.cpp` | `Agent.service_time`, `TaskWindow`, 새 함수들, `ReplanResult.schedule` |
@@ -456,6 +467,27 @@ K: t0 도착, 작업 5 → 예약을 t0~t5까지만 함
 결정 5가 필요한 이유는 코드 규칙 하나 때문이다. **구조 로봇(working_ids)은 옛 경로를 장부에 적지 않고, 자기
 차례에 A\*로 새 길을 찾을 때 비로소 적는다.** 그래서 구조 로봇이 된 작업 중 로봇은, 먼저 적어 두지 않으면
 앞 차례 로봇들 눈에 안 보인다.
+
+### Q3. 도착 t2, 작업 시간 3이면 왜 t6이 아니라 t5부터 움직일 수 있나?
+
+**"t5부터 움직일 수 있다" = t5에 출발한다**는 뜻이다. 옆 칸에 도착하는 건 t6이다.
+
+```
+시각:     t2        t3        t4        t5        t6
+          │         │         │         │         │
+위치:   (2,0)     (2,0)     (2,0)     (2,0)     옆 칸
+          ├─ 작업1 ─┼─ 작업2 ─┼─ 작업3 ─┼─ 이동 ──┤
+          ↑                             ↑
+        도착                          작업 끝 = 출발
+```
+
+- **시각(t2, t3, …)은 점**이다. 경로의 각 칸 `(x, y, t)`는 "그 순간 어디 있나"를 나타낸다.
+- **스텝은 점과 점 사이의 구간**이다. 한 스텝 동안 한 칸 이동하거나, 제자리에 있거나, 작업 한 단위를 한다.
+- 작업 시간 3 = 구간 3개(t2→t3, t3→t4, t4→t5). t5에 끝나고, 바로 다음 구간 t5→t6에 출발할 수 있다.
+- 그래서 경로에 (2,0)이 t2~t5로 **4번**(점) 나오지만 작업은 **3스텝**(구간)이다. 울타리 기둥 4개 사이의 칸이 3개인 것과 같다.
+
+"도착 + 작업 시간 + 1"에 출발하게 하면 작업 시간 0인 로봇도 도착 후 한 스텝을 쉬어야 해서, "작업 시간 0이면
+예전과 똑같다"는 약속이 깨진다.
 
 ---
 
