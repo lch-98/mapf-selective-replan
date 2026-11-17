@@ -101,9 +101,16 @@ PYBIND11_MODULE(mapf_py, m) {
         .def("set_obstacle", &Map::set_obstacle, py::arg("x"), py::arg("y"));
 
     // ── AStarConfig / ReplanConfig ─────────────────────────────────
+    py::enum_<TieBreak>(m, "TieBreak")
+        .value("LARGER_G", TieBreak::kLargerG)
+        .value("SMALLER_G", TieBreak::kSmallerG)
+        .value("RANDOM", TieBreak::kRandom);
+
     py::class_<AStarConfig>(m, "AStarConfig")
         .def(py::init<>())
-        .def_readwrite("max_timestep", &AStarConfig::max_timestep);
+        .def_readwrite("max_timestep", &AStarConfig::max_timestep)
+        .def_readwrite("tie_break", &AStarConfig::tie_break)
+        .def_readwrite("tie_seed", &AStarConfig::tie_seed);
 
     // 재계획 스위치(12·13·19장). 21장 5-1에서 전부 노출 — 전에는 max_escalation_tiers만 있어서
     // 파이썬(GUI)에서 "우리 방법"(고정 먼저 + 도달 확인 + 경로 구조)을 고를 수 없었다.

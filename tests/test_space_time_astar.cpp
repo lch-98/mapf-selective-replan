@@ -330,3 +330,49 @@ TEST(SpaceTimeAStarTest, SettledTableBoundsWorkWhenEnclosedAndKeepsBlockers) {
     EXPECT_LT(fast.expanded, slow.expanded);
     EXPECT_EQ(owners_in_order(fast, settled), owners_in_order(slow, unknown));
 }
+
+// ───────────────────────────────────────────────────────────────
+// 21장 5-5 — 동점 규칙 스위치(AStarConfig::tie_break). 어느 규칙이든 경로 길이는 같고,
+// "길이가 같은 경로 중 어느 것을, 얼마나 많이 확인해서" 찾는지만 달라진다.
+// ───────────────────────────────────────────────────────────────
+
+TEST(SpaceTimeAStarTest, SmallerGTieBreakKeepsLengthButChecksEveryTiedState) {
+    // TieBreakGoesStraightAndIsFixed와 같은 빈 3x3, (0,0) → (2,2). 최단 경로 위의 칸은 전부 f = 4다.
+    //   - g 큰 쪽 먼저(기본): 곧장 파고들어 5개만 확인한다.
+    //   - g 작은 쪽 먼저: f = 4인 칸을 출발에서 가까운 층부터 다 확인한 뒤에야 목적지(g = 4)를 꺼낸다
+    //     → 9칸 전부. 기다리기 상태는 f = 5 이상이라 확인하지 않는다.
+    // 길이(도착 t4)는 같아야 한다.
+    Map map(3, 3);
+    ReservationTable reservations;
+    AStarConfig config;
+    config.tie_break = TieBreak::kSmallerG;
+    SpaceTimeAStar astar(map, reservations, config);
+
+    AStarResult result = astar.search_with_diagnostics(Cell{0, 0}, Cell{2, 2});
+
+    ASSERT_TRUE(result.path.has_value());
+    EXPECT_EQ(result.path->back(), (SpaceTimeCell{2, 2, 4}));
+    EXPECT_EQ(result.expanded, 9);
+}
+
+TEST(SpaceTimeAStarTest, RandomTieBreakKeepsLengthAndIsReproducible) {
+    // 빈 5x5, (0,0) → (4,4): 길이 8인 최단 경로가 70개다. 무작위 동점 규칙은
+    //   - 씨앗이 무엇이든 길이 8(도착 t8)을 찾고,
+    //   - 같은 씨앗이면 몇 번을 돌려도 같은 경로,
+    //   - 씨앗이 다르면 다른 경로가 나올 수 있어야 한다(20개 씨앗에서 2가지 이상).
+    Map map(5, 5);
+    ReservationTable reservations;
+    std::vector<Path> found;
+    for (std::uint32_t seed = 0; seed < 20; ++seed) {
+        AStarConfig config;
+        config.tie_break = TieBreak::kRandom;
+        config.tie_seed = seed;
+        SpaceTimeAStar astar(map, reservations, config);
+        std::optional<Path> first = astar.search(Cell{0, 0}, Cell{4, 4});
+        ASSERT_TRUE(first.has_value());
+        EXPECT_EQ(first->back(), (SpaceTimeCell{4, 4, 8}));
+        EXPECT_EQ(astar.search(Cell{0, 0}, Cell{4, 4}), first);
+        if (std::find(found.begin(), found.end(), *first) == found.end()) found.push_back(*first);
+    }
+    EXPECT_GE(found.size(), 2u);
+}

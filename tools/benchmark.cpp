@@ -425,7 +425,8 @@ bool obstacles_actually_block_someone(const std::vector<Agent>& agents, const Pl
 // 여기서는 plan_ok=true가 항상 보장된다.
 ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents,
                                  const PlanResult& initial, const std::vector<Cell>& obstacles,
-                                 int current_time, const ReplanConfig& replan_config) {
+                                 int current_time, const ReplanConfig& replan_config,
+                                 const AStarConfig& astar_config) {
     ScenarioResult result;
     result.plan_ok = true;
     result.initial_soc = sum_of_costs(initial);
@@ -445,7 +446,9 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 
     // 방법 A: 전체 재계획 (현재 위치 기준).
     {
-        PrioritizedPlanner planner_a(map);
+        // 재계획 엔진만 astar_config(--tie-break)를 쓴다. 처음 계획(시나리오 만들기)은 기본 규칙
+        // 그대로라서, 동점 규칙을 바꿔도 같은 시나리오끼리 비교된다(20장 원칙 3·5).
+        PrioritizedPlanner planner_a(map, astar_config);
         auto t0 = std::chrono::steady_clock::now();
         std::optional<PlanResult> full = planner_a.full_replan(agents, initial, schedule, obstacles, current_time);
         result.full_replan_ms = elapsed_ms(t0);
@@ -460,7 +463,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 
     // 방법 B: 선택적 재계획(Tier 0/1/안전망).
     {
-        PrioritizedPlanner planner_b(map, AStarConfig{}, replan_config);
+        PrioritizedPlanner planner_b(map, astar_config, replan_config);
         auto t0 = std::chrono::steady_clock::now();
         std::optional<ReplanResult> selective = planner_b.replan(agents, initial, schedule, obstacles, current_time);
         result.selective_replan_ms = elapsed_ms(t0);
@@ -500,6 +503,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 // 로봇 배치·장애물·장애물 시각이 꺼진 경우와 같다(20장 원칙 5 "짝지은 비교").
 ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, std::mt19937& rng,
                                               const ReplanConfig& replan_config,
+                                              const AStarConfig& astar_config,
                                               std::mt19937& service_rng, int service_lo,
                                               int service_hi) {
     constexpr int kMaxAttempts = 200;
@@ -545,7 +549,7 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
         }
 
         ScenarioResult result =
-            run_one_scenario(map, agents, *initial, obstacles, current_time, replan_config);
+            run_one_scenario(map, agents, *initial, obstacles, current_time, replan_config, astar_config);
         result.plan_attempts = attempt;
         return result;
     }
@@ -568,6 +572,7 @@ struct Task {
     ReplanConfig replan_config;  // 방법 B(replan)의 설정(--tiers). 모든 task가 같은 값.
     int service_lo{0};           // 작업 시간 분포 U[service_lo, service_hi](--service). hi가 0이면 끔.
     int service_hi{0};
+    AStarConfig astar_config;    // 재계획 엔진의 A* 설정(--tie-break). 처음 계획에는 안 쓴다.
 };
 
 // 작업 하나를 처리해서 CSV 한 줄(개행 포함)을 문자열로 만들어 돌려준다.
@@ -581,7 +586,8 @@ std::string run_task(const Task& task) {
     std::seed_seq service_seed{task.seed, 1u};
     std::mt19937 service_rng(service_seed);
     ScenarioResult r = find_solvable_scenario_and_run(*task.map, task.num_agents, rng,
-                                                      task.replan_config, service_rng,
+                                                      task.replan_config, task.astar_config,
+                                                      service_rng,
                                                       task.service_lo, task.service_hi);
 
     std::ostringstream out;
@@ -625,6 +631,9 @@ int main(int argc, char** argv) {
     int repeats = 50;
     int service_lo = 0;
     int service_hi = 0;
+    // --tie-break R : 재계획 엔진의 A* 동점 규칙(21장 5-5). larger-g(기본) | smaller-g | random:SEED.
+    //                 처음 계획은 기본 규칙 그대로라 시나리오는 같다.
+    AStarConfig astar_config;
     ReplanConfig replan_config;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -655,6 +664,19 @@ int main(int argc, char** argv) {
                 std::cerr << "--service needs 0 <= LO <= HI\n";
                 return 1;
             }
+        } else if (arg == "--tie-break" && i + 1 < argc) {
+            std::string value = argv[++i];
+            if (value == "larger-g") {
+                astar_config.tie_break = TieBreak::kLargerG;
+            } else if (value == "smaller-g") {
+                astar_config.tie_break = TieBreak::kSmallerG;
+            } else if (value.rfind("random:", 0) == 0) {
+                astar_config.tie_break = TieBreak::kRandom;
+                astar_config.tie_seed = static_cast<uint32_t>(std::stoul(value.substr(7)));
+            } else {
+                std::cerr << "--tie-break must be larger-g, smaller-g or random:SEED\n";
+                return 1;
+            }
         } else if (arg == "--yield-min-delay" && i + 1 < argc) {
             replan_config.yield_min_delay = std::atoi(argv[++i]);
         } else if (arg == "--rescue" && i + 1 < argc) {
@@ -669,7 +691,7 @@ int main(int argc, char** argv) {
             }
         } else {
             std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K] "
-                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI]\n";
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED]\n";
             return 1;
         }
     }
@@ -708,7 +730,7 @@ int main(int argc, char** argv) {
                 uint32_t seed = kBaseSeed + static_cast<uint32_t>(tasks.size());
                 tasks.push_back(
                     Task{&named_map.map, named_map.name, num_agents, trial, seed, replan_config,
-                         service_lo, service_hi});
+                         service_lo, service_hi, astar_config});
             }
         }
     }

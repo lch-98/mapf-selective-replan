@@ -9,6 +9,7 @@
 #include <cmath>
 #include <memory>
 #include <queue>
+#include <random>
 #include <unordered_set>
 
 namespace mapf {
@@ -24,6 +25,7 @@ int manhattan_distance(Cell a, Cell b) {
 // "시간(비용)"이 g의 정확한 의미다.
 // parent로 부모 노드를 가리켜서, goal에 도착했을 때 경로를 거슬러 올라간다.
 // order는 이 노드를 큐에 넣은 순서 번호다(0, 1, 2, ...). 동점 처리에 쓴다(아래 NodeCompare).
+// 동점 규칙이 kRandom이면 순서 번호 대신 무작위 번호가 들어간다.
 struct Node {
     SpaceTimeCell cell;
     int g;
@@ -42,12 +44,19 @@ struct Node {
 // 3순위까지 정하면 꺼내는 순서가 우선순위 큐 내부 배열 모양과 상관없이 정해진다. f만 비교하면 f가
 // 같은 노드끼리는 배열 모양에 따라 아무거나 나와서, 노드를 넣는 양만 달라져도(18장 2-2단계) 길이가
 // 같은 다른 경로가 뽑힐 수 있다. 그러면 "결과가 같다"를 칸마다 비교로 확인할 수 없다.
+//
+// 동점 규칙 스위치(21장 5-5): kSmallerG면 2순위가 "g가 작은 것"으로 바뀐다. kRandom이면 3순위의
+// order에 무작위 번호가 들어간다(아래 search_with_diagnostics). 1순위(f)는 어느 규칙이든 같으므로
+// 경로 길이는 안 바뀐다. 굳는 시각 최적화(18장 2-2)도 안전하다 — 같은 칸에 늦게 도착한 상태는 g가
+// 더 커서 f도 더 크므로(h는 같음) 동점 규칙과 상관없이 일찍 도착한 상태가 먼저 꺼내진다.
 struct NodeCompare {
+    bool prefer_larger_g{true};
+
     // 우선순위 큐는 "가장 큰 것"을 꺼내므로, 먼저 꺼내야 하는 쪽이 "작다"가 되도록 뒤집어서 쓴다:
     // a가 b보다 나중에 나와야 하면 true.
     bool operator()(const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) const {
         if (a->f() != b->f()) return a->f() > b->f();
-        if (a->g != b->g) return a->g < b->g;
+        if (a->g != b->g) return prefer_larger_g ? a->g < b->g : a->g > b->g;
         return a->order > b->order;
     }
 };
@@ -111,10 +120,21 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
     }
     bool goal_block_reported = false;
 
-    std::priority_queue<std::shared_ptr<Node>, std::vector<std::shared_ptr<Node>>, NodeCompare> open;
+    NodeCompare compare;
+    compare.prefer_larger_g = config_.tie_break != TieBreak::kSmallerG;
+    std::priority_queue<std::shared_ptr<Node>, std::vector<std::shared_ptr<Node>>, NodeCompare> open(
+        compare);
     std::unordered_set<SpaceTimeCell, VisitedHash> visited;
 
-    unsigned long long next_order = 0;  // 큐에 넣은 순서 번호(동점 처리 3순위)
+    // 동점 처리 3순위 번호. 기본은 큐에 넣은 순서(0, 1, 2, ...). kRandom이면 tie_seed로 시작한
+    // 난수(64비트라 두 노드가 같은 번호를 받을 일은 사실상 없다). 탐색마다 새로 시작하므로
+    // 같은 입력이면 같은 결과가 나온다.
+    unsigned long long next_order = 0;
+    std::mt19937_64 tie_rng(config_.tie_seed);
+    const bool random_ties = config_.tie_break == TieBreak::kRandom;
+    auto take_order = [&]() -> unsigned long long {
+        return random_ties ? tie_rng() : next_order++;
+    };
 
     // 장부가 굳는 시각(18장). 그 뒤로는 장부가 같은 그림의 반복이라, 같은 칸에 일찍 도착한 쪽이
     // 그 자리에서 기다리기만 하면 늦게 도착한 쪽이 할 수 있는 모든 걸 할 수 있다. 그래서 t >= 굳는
@@ -131,7 +151,7 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
     start_node->g = 0;
     start_node->h = manhattan_distance(start, goal);
     start_node->parent = nullptr;
-    start_node->order = next_order++;
+    start_node->order = take_order();
     open.push(start_node);
 
     while (!open.empty()) {
@@ -192,7 +212,7 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
             next_node->g = current->g + 1;
             next_node->h = manhattan_distance(next_xy, goal);
             next_node->parent = current;
-            next_node->order = next_order++;
+            next_node->order = take_order();
             open.push(next_node);
         }
     }

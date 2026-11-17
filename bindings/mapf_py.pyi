@@ -90,6 +90,16 @@ class Map:
         """런타임에 정적 장애물(영원히 막힌 벽)을 추가한다."""
         ...
 
+class TieBreak:
+    """A*에서 f가 같은 노드 중 무엇을 먼저 꺼낼지(21장 5-5). 경로 길이는 안 바뀐다."""
+
+    LARGER_G: ClassVar["TieBreak"]
+    """기본: g가 큰 쪽 → 먼저 넣은 쪽."""
+    SMALLER_G: ClassVar["TieBreak"]
+    """g가 작은 쪽 → 먼저 넣은 쪽."""
+    RANDOM: ClassVar["TieBreak"]
+    """g가 큰 쪽 → tie_seed로 정한 무작위 순."""
+
 class AStarConfig:
     """SpaceTimeAStar 탐색의 설정. PrioritizedPlanner 생성자에 선택적으로 넘긴다."""
 

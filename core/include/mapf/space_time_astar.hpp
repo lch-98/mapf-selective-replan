@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -17,9 +18,23 @@ namespace mapf {
 // 시작부터 목적지까지의 시공간 경로. path[0]이 출발 시점에 대응한다.
 using Path = std::vector<SpaceTimeCell>;
 
+// f가 같은 노드 중 무엇을 먼저 꺼낼지(동점 규칙, 18장 2-1 / 20장 원칙 3).
+// 어느 규칙이든 A*가 찾는 경로의 길이(도착 시각)는 같다 — 길이가 같은 여러 경로 중 "어느 것"이
+// 나오는지만 달라진다. 민감도 실험에서 결론이 이 선택에 흔들리지 않는지 보는 데 쓴다.
+enum class TieBreak {
+    kLargerG,   // 기본: g가 큰 쪽(목적지에 가까운 쪽) → 먼저 넣은 쪽
+    kSmallerG,  // g가 작은 쪽 → 먼저 넣은 쪽
+    kRandom,    // g가 큰 쪽 → tie_seed로 정한 무작위 번호 순(씨앗이 같으면 결과도 같다)
+};
+
 struct AStarConfig {
     // t가 이 값을 넘으면 그 가지(branch)를 포기한다 — 무한 탐색 방지.
     int max_timestep{256};
+
+    // 동점 규칙(21장 5-5). 기본값이면 예전과 완전히 같다.
+    TieBreak tie_break{TieBreak::kLargerG};
+    // kRandom일 때 무작위 번호의 씨앗. 탐색(search 호출)마다 이 씨앗으로 새로 시작한다.
+    std::uint32_t tie_seed{0};
 };
 
 // 탐색 실패 시 "왜 막혔는지"까지 보고 싶을 때 쓰는 결과 타입.
