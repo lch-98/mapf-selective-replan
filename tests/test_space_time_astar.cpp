@@ -109,3 +109,76 @@ TEST(SpaceTimeAStarTest, DiagnosticsRecordBlockedAttempts) {
     }
     EXPECT_TRUE(found);
 }
+
+// ───────────────────────────────────────────────────────────────
+// 17장 결정 7 — 작업 시간(service_time)
+// ───────────────────────────────────────────────────────────────
+
+TEST(SpaceTimeAStarTest, ServiceTimeAppendsStayCellsAtGoal) {
+    // 5x1 통로. (0,0) → (2,0)은 t=2에 도착한다. 작업 시간 3이면 t=2~4에 작업하고
+    // t=5부터 움직일 수 있으므로, 경로 끝에 (2,0)t3 (2,0)t4 (2,0)t5가 붙는다.
+    Map map(5, 1);
+    ReservationTable reservations;
+    SpaceTimeAStar astar(map, reservations);
+
+    auto path = astar.search(Cell{0, 0}, Cell{2, 0}, /*start_time=*/0, /*service_time=*/3);
+
+    ASSERT_TRUE(path.has_value());
+    ASSERT_EQ(path->size(), 6u);
+    EXPECT_EQ((*path)[2], (SpaceTimeCell{2, 0, 2}));  // 도착
+    EXPECT_EQ((*path)[3], (SpaceTimeCell{2, 0, 3}));
+    EXPECT_EQ((*path)[4], (SpaceTimeCell{2, 0, 4}));
+    EXPECT_EQ((*path)[5], (SpaceTimeCell{2, 0, 5}));  // 작업 끝, 이 시각부터 움직일 수 있음
+}
+
+TEST(SpaceTimeAStarTest, ServiceTimeWhenAlreadyAtGoal) {
+    // 출발 칸이 곧 목적지면 출발 시각에 도착한 것이다. 작업 시간 2 → t=0~1 작업, t=2부터 이동 가능.
+    Map map(3, 1);
+    ReservationTable reservations;
+    SpaceTimeAStar astar(map, reservations);
+
+    auto path = astar.search(Cell{1, 0}, Cell{1, 0}, /*start_time=*/0, /*service_time=*/2);
+
+    ASSERT_TRUE(path.has_value());
+    EXPECT_EQ(*path, (Path{SpaceTimeCell{1, 0, 0}, SpaceTimeCell{1, 0, 1}, SpaceTimeCell{1, 0, 2}}));
+}
+
+TEST(SpaceTimeAStarTest, ServiceTimeMustFinishWithinHorizon) {
+    // (0,0) → (2,0)은 가장 빨리 t=2에 도착한다. max_timestep=4.
+    //   작업 2: 2 + 2 = 4 <= 4 → 성공, 경로는 t=4에서 끝난다.
+    //   작업 3: 2 + 3 = 5 >  4 → 시간 안에 작업이 안 끝나므로 실패.
+    Map map(3, 1);
+    ReservationTable reservations;
+    AStarConfig config;
+    config.max_timestep = 4;
+    SpaceTimeAStar astar(map, reservations, config);
+
+    auto fits = astar.search(Cell{0, 0}, Cell{2, 0}, /*start_time=*/0, /*service_time=*/2);
+    ASSERT_TRUE(fits.has_value());
+    EXPECT_EQ(fits->back(), (SpaceTimeCell{2, 0, 4}));
+
+    EXPECT_FALSE(astar.search(Cell{0, 0}, Cell{2, 0}, /*start_time=*/0, /*service_time=*/3).has_value());
+}
+
+TEST(SpaceTimeAStarTest, ServiceTimeFailsAtOnceWhenGoalFreesTooLate) {
+    // 다른 로봇(7번)이 t=3에 목적지 (2,0)을 지나간다. 그래서 t=4 이후에야 도착할 수 있다.
+    // max_timestep=5.
+    //   작업 1: 4 + 1 = 5 <= 5 → 성공.
+    //   작업 3: 4 + 3 = 7 >  5 → 탐색해 볼 필요도 없이 바로 실패해야 하고, 누가 막았는지
+    //           추적할 수 있게 목적지 칸 (2,0)t3 하나만 blocked_attempts에 남아야 한다.
+    Map map(3, 1);
+    ReservationTable reservations;
+    reservations.reserve(2, 0, /*t=*/3, /*agent_id=*/7);
+    AStarConfig config;
+    config.max_timestep = 5;
+    SpaceTimeAStar astar(map, reservations, config);
+
+    auto short_task = astar.search(Cell{0, 0}, Cell{2, 0}, /*start_time=*/0, /*service_time=*/1);
+    ASSERT_TRUE(short_task.has_value());
+    EXPECT_EQ(short_task->back(), (SpaceTimeCell{2, 0, 5}));
+
+    AStarResult long_task =
+        astar.search_with_diagnostics(Cell{0, 0}, Cell{2, 0}, /*start_time=*/0, /*service_time=*/3);
+    EXPECT_FALSE(long_task.path.has_value());
+    EXPECT_EQ(long_task.blocked_attempts, (std::vector<SpaceTimeCell>{SpaceTimeCell{2, 0, 3}}));
+}

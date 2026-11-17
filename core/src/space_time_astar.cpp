@@ -67,12 +67,13 @@ SpaceTimeAStar::SpaceTimeAStar(const Map& map, const ReservationTable& reservati
     : map_(map), reservations_(reservations), config_(config) {}
 
 // search_with_diagnostics의 wrapper 함수 > 경로만 반환할 때 사용
-std::optional<Path> SpaceTimeAStar::search(Cell start, Cell goal, int start_time) const {
-    return search_with_diagnostics(start, goal, start_time).path;
+std::optional<Path> SpaceTimeAStar::search(Cell start, Cell goal, int start_time,
+                                           int service_time) const {
+    return search_with_diagnostics(start, goal, start_time, service_time).path;
 }
 
-AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal,
-                                                     int start_time) const {
+AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int start_time,
+                                                     int service_time) const {
     AStarResult result;
 
     // 목적지가 마지막으로 예약된 시각. PrioritizedPlanner는 경로를 "도착 후 목적지에 영원히
@@ -85,11 +86,15 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal,
         if (reservations_.is_occupied(goal.x, goal.y, t)) goal_last_reserved = t;
     }
 
-    // max_timestep까지 목적지가 막혀 있으면(장애물, 또는 목적지가 같은 앞 순서
-    // 로봇의 Tail) 언제 도착해도 머물 수 없다 — 탐색해봐야 max_timestep까지
-    // 헛돌기만 하므로 바로 실패한다. 막은 칸은 blocked_attempts로 알려준다.
-    if (goal_last_reserved >= config_.max_timestep) {
-        result.blocked_attempts.push_back(SpaceTimeCell{goal.x, goal.y, goal_last_reserved});
+    // 가장 빨리 도착해도(마지막 예약 바로 다음 시각, 또는 출발 시각) 작업이 max_timestep 안에
+    // 끝나지 않으면 탐색해봐야 헛돈다 — 바로 실패한다. 작업 시간이 0이면 "max_timestep까지
+    // 목적지가 막혀 있으면 실패"(장애물, 또는 목적지가 같은 앞 순서 로봇의 Tail)와 같다.
+    // 목적지가 실제로 예약되어 있었다면 그 칸을 blocked_attempts로 알려준다(누가 막았는지 추적용).
+    int earliest_arrival = std::max(start_time, goal_last_reserved + 1);
+    if (earliest_arrival + service_time > config_.max_timestep) {
+        if (goal_last_reserved >= start_time) {
+            result.blocked_attempts.push_back(SpaceTimeCell{goal.x, goal.y, goal_last_reserved});
+        }
         return result;
     }
     bool goal_block_reported = false;
@@ -114,7 +119,17 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal,
         Cell current_xy{current->cell.x, current->cell.y};
         if (current_xy == goal) {
             if (current->cell.t > goal_last_reserved) {
+                // 목적지 노드는 h = 0이라 f = g이고, A*는 f가 작은 순서로 꺼내므로 목적지에
+                // 도착하는 시각도 빠른 순서로 꺼내진다. 그래서 이 시각이 가능한 가장 빠른 도착이다.
+                // 여기서 작업이 max_timestep 안에 안 끝나면 더 늦은 도착은 당연히 안 되므로 끝낸다.
+                if (current->cell.t + service_time > config_.max_timestep) return result;
+
+                // 도착 후 작업 시간만큼 목적지에 머무는 칸을 붙인다(17장 결정 2). 이 칸들은
+                // 위의 도착 조건(마지막 예약보다 뒤)에 따라 이미 비어 있다.
                 result.path = reconstruct_path(current);
+                for (int k = 1; k <= service_time; ++k) {
+                    result.path->push_back(SpaceTimeCell{goal.x, goal.y, current->cell.t + k});
+                }
                 return result;
             }
             // 도착은 했지만 나중에 누가 목적지를 지나가서 머물 수 없다 — 도착으로

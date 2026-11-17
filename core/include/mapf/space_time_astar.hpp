@@ -38,16 +38,24 @@ struct AStarResult {
 // 않아야 도착으로 인정한다(PrioritizedPlanner의 Tail Reservation과 같은 기준). 나중에 누가
 // goal을 지나갈 예정이면 탐색을 계속해서, 비켜 있다가/기다렸다가 늦게 도착하는
 // 경로를 찾는다. goal이 max_timestep까지 막혀 있으면 탐색 없이 바로 실패한다.
+//
+// 작업 시간(service_time, 17장 결정 7): 도착 후 그 스텝 수만큼 목적지에서 작업한다. 도착 시각이
+// t_a면 t_a + service_time <= max_timestep이어야 도착으로 인정하고, 돌려주는 경로 끝에 목적지에
+// 머무는 칸 service_time개((goal, t_a+1) ... (goal, t_a+service_time))를 붙인다. 작업 구간은
+// 위의 "도착 후 max_timestep까지 goal이 비어 있어야 한다"에 이미 포함되므로 따로 확인할 것이
+// 없다. service_time이 0이면 예전과 똑같다.
 class SpaceTimeAStar {
 public:
     SpaceTimeAStar(const Map& map, const ReservationTable& reservations,
                    AStarConfig config = AStarConfig{});
 
     // 경로만 필요할 때. search_with_diagnostics()의 얇은 래퍼다.
-    std::optional<Path> search(Cell start, Cell goal, int start_time = 0) const;
+    std::optional<Path> search(Cell start, Cell goal, int start_time = 0,
+                               int service_time = 0) const;
 
     // 실패 원인(막힌 시공간 칸들)까지 필요할 때.
-    AStarResult search_with_diagnostics(Cell start, Cell goal, int start_time = 0) const;
+    AStarResult search_with_diagnostics(Cell start, Cell goal, int start_time = 0,
+                                        int service_time = 0) const;
 
 private:
     const Map& map_;
