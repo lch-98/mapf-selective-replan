@@ -248,7 +248,11 @@ T에 아직 도착 전(이동 중)이던 로봇:  새 경로에서 다시 계산
 > `core/include/mapf/task_schedule.hpp`에 두었다. 근무표는 "누가 언제 작업하나"만 다루는 독립된
 > 개념이라 따로 두면 읽기 쉽고, 플래너 없이 따로 테스트할 수 있다. 경로 하나에서 작업 구간을 읽는
 > `window_from_path`와 상태 판정 `task_state_at`도 같이 두었다. `window_from_path`는 경로 끝의
-> (작업 시간 + 1)개 칸이 전부 목적지인지 확인하고, 아니면 에러를 낸다(결정 3의 실수를 막는 안전장치).
+> (작업 시간 + 1)개 칸이 전부 목적지인지 확인하고, 아니면 에러를 낸다(결정 3의 실수를 막는 **보조** 안전장치).
+> **한계**: 구조 로봇으로 불렸지만 실제로는 안 움직인 로봇(헛부탁)의 경로는 끝까지 전부 목적지라 검사를
+> 통과하고 작업 구간을 틀리게 읽는다. 그래서 `window_from_path`/`schedule_from_plan`은 **처음 계획 결과에만**
+> 쓰고, 재계획 결과에는 반드시 `update_schedule`을 쓴다. `update_schedule`은 이미 도착한 로봇의 경로를
+> 다시 읽지 않으므로 이 경우도 안전하다(테스트 `UpdateScheduleKeepsRescuedAgentThatDidNotMove`).
 
 ```cpp
 // task_schedule.hpp

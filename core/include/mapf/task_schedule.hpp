@@ -43,9 +43,15 @@ enum class TaskState {
 TaskState task_state_at(const TaskWindow& window, int t);
 
 // 경로 하나에서 작업 구간을 읽는다: end = 경로 끝 시각, start = end - service_time.
-// 경로 끝의 (service_time + 1)개 칸이 전부 목적지여야 한다(A*가 작업 칸을 붙여 만든 경로).
-// 아니면 std::invalid_argument를 던진다 — 작업 칸 없이 만든 경로나, 구조되어 비켰다가 돌아온
-// 경로에서 작업 구간을 잘못 읽는 실수를 조용히 넘기지 않기 위해서다(17장 결정 3).
+// "경로 끝 = 작업 끝"이라는 가정은 A*가 새로 만든 경로(도착 + 작업 칸)에서만 맞다.
+// 그래서 **처음 계획 결과에만** 쓴다. 재계획 결과에는 update_schedule을 쓴다.
+//
+// 보조 안전장치: 경로 끝의 (service_time + 1)개 칸이 전부 목적지가 아니면 std::invalid_argument를
+// 던진다. 작업 칸 없이 만든 경로나, 구조되어 비켰다가 돌아온 경로(끝 바로 앞이 옆 칸)를 잘못
+// 읽는 실수를 잡는다(17장 결정 3).
+// 한계: 구조 로봇으로 불렸지만 실제로는 안 움직인 로봇의 경로는 끝까지 전부 목적지라서 이 검사를
+// 통과하고, 작업 구간을 틀리게 읽는다. 이 경우를 막는 것은 update_schedule의 규칙(이미 도착한
+// 로봇은 경로를 다시 읽지 않는다)이다.
 TaskWindow window_from_path(const Agent& agent, const Path& path);
 
 // 처음 계획(plan)의 결과에서 근무표를 만든다. 로봇마다 window_from_path를 적용한다.

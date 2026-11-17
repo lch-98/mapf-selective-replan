@@ -131,3 +131,22 @@ TEST(TaskScheduleTest, UpdateScheduleRecomputesOnlyAgentsStillMoving) {
     EXPECT_EQ(updated.at(1), (TaskWindow{4, 9}));    // 작업 중: 그대로
     EXPECT_EQ(updated.at(2), (TaskWindow{12, 14}));  // 이동 중이던 로봇: 새 도착으로
 }
+
+TEST(TaskScheduleTest, UpdateScheduleKeepsRescuedAgentThatDidNotMove) {
+    // window_from_path의 한계와, 그것을 update_schedule이 막는다는 것을 확인한다.
+    // K는 t0에 도착, 작업 5 → 실제 작업 구간 [0, 5]. t6에 구조 로봇으로 불렸지만 비킬 필요가
+    // 없어서 그대로 머물렀다(헛부탁). 새 경로는 t0~t6 전부 (4,1)이다.
+    Agent k{0, Cell{4, 1}, Cell{4, 1}, /*service_time=*/5};
+    Path stayed = make_path(0, {{4, 1}, {4, 1}, {4, 1}, {4, 1}, {4, 1}, {4, 1}, {4, 1}});
+
+    // window_from_path로 읽으면 끝의 6칸이 전부 목적지라 검사를 통과하고 [1, 6]으로 틀리게 읽는다.
+    EXPECT_EQ(window_from_path(k, stayed), (TaskWindow{1, 6}));
+
+    // update_schedule은 이미 도착한(주차 중인) 로봇의 경로를 다시 읽지 않으므로 [0, 5]를 지킨다.
+    TaskSchedule previous;
+    previous[0] = TaskWindow{0, 5};
+    std::unordered_map<int, Path> new_paths;
+    new_paths[0] = stayed;
+    TaskSchedule updated = update_schedule({k}, previous, new_paths, /*current_time=*/6);
+    EXPECT_EQ(updated.at(0), (TaskWindow{0, 5}));
+}
