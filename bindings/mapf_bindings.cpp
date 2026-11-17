@@ -125,9 +125,15 @@ PYBIND11_MODULE(mapf_py, m) {
              py::arg("config") = AStarConfig{}, py::arg("replan_config") = ReplanConfig{},
              py::keep_alive<1, 2>())
         .def("plan", &PrioritizedPlanner::plan, py::arg("agents"))
-        .def("replan", &PrioritizedPlanner::replan, py::arg("agents"), py::arg("previous_paths"),
+        .def("replan",
+             py::overload_cast<const std::vector<Agent>&, const PlanResult&,
+                               const std::vector<Cell>&, int>(&PrioritizedPlanner::replan),
+             py::arg("agents"), py::arg("previous_paths"),
              py::arg("new_obstacles"), py::arg("current_time"))
-        .def("full_replan", &PrioritizedPlanner::full_replan, py::arg("agents"), py::arg("previous_paths"),
+        .def("full_replan",
+             py::overload_cast<const std::vector<Agent>&, const PlanResult&,
+                               const std::vector<Cell>&, int>(&PrioritizedPlanner::full_replan),
+             py::arg("agents"), py::arg("previous_paths"),
              py::arg("new_obstacles"), py::arg("current_time"))
         .def_static("path_hits_obstacle", &PrioritizedPlanner::path_hits_obstacle, py::arg("path"),
                     py::arg("new_obstacles"), py::arg("current_time"));

@@ -876,3 +876,200 @@ TEST(PrioritizedPlannerTest, PlanRejectsNegativeServiceTime) {
     EXPECT_THROW(planner.plan({Agent{0, Cell{0, 0}, Cell{2, 0}, /*service_time=*/-1}}),
                  std::invalid_argument);
 }
+
+// ───────────────────────────────────────────────────────────────
+// 17장 — 작업 시간(service_time): replan / full_replan
+//
+// 16장·17장 17.5의 K·W·Z 예시를 쓴다.
+//   y=0:  # # # # . # # #     ← (4,0): K가 비켜설 수 있는 막다른 칸
+//   y=1:  . # # . . . # #     ← (0,1): Z가 머무는 막다른 칸
+//   y=2:  . . . . . . . .
+// K(0번): (4,1)에 t0 도착, 작업 service_k. W(1번): (0,2)->(6,2) 아래 줄 직진. Z(2번): (0,1) 제자리.
+// t3에 (4,2)에 장애물이 생긴다. W의 유일한 우회로는 K가 있는 (4,1)이다.
+// ───────────────────────────────────────────────────────────────
+
+namespace {
+
+struct KwzScenario {
+    Map map{std::vector<std::string>{
+        "####.###",
+        ".##...##",
+        "........",
+    }};
+    std::vector<Agent> agents;
+    PlanResult previous_paths;
+    TaskSchedule schedule;
+};
+
+KwzScenario make_kwz(int service_k) {
+    KwzScenario s;
+    s.agents = {
+        Agent{0, Cell{4, 1}, Cell{4, 1}, service_k},  // K
+        Agent{1, Cell{0, 2}, Cell{6, 2}},             // W
+        Agent{2, Cell{0, 1}, Cell{0, 1}},             // Z
+    };
+    Path k_path;
+    for (int t = 0; t <= service_k; ++t) k_path.push_back(SpaceTimeCell{4, 1, t});  // 도착 + 작업 칸
+    s.previous_paths[0] = k_path;
+    s.previous_paths[1] = Path{
+        SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
+        SpaceTimeCell{3, 2, 3}, SpaceTimeCell{4, 2, 4}, SpaceTimeCell{5, 2, 5},
+        SpaceTimeCell{6, 2, 6},
+    };
+    s.previous_paths[2] = Path{SpaceTimeCell{0, 1, 0}};
+    s.schedule = schedule_from_plan(s.agents, s.previous_paths);
+    return s;
+}
+
+ReplanConfig fixed_first_idea3() {
+    ReplanConfig config;
+    config.order = ReplanOrder::kFixedFirst;
+    config.check_reachability = true;
+    config.rescue_selection = RescueSelection::kShortestPathConflicts;
+    return config;
+}
+
+}  // namespace
+
+TEST(SelectiveReplanTest, WorkingAgentStepsAsideOnlyAfterItsTaskEnds) {
+    // 17장 17.5 경우 2. K의 작업 시간 8 → 근무표 [0, 8], t3에는 작업 중.
+    // K는 구조 로봇으로 불리지만 t8까지 (4,1)에서 작업을 계속하고, t9에 (4,0)으로 비켰다가
+    // t10에 돌아온다. W는 K의 작업이 끝나기를 기다렸다가 t9에 (4,1)을 지나 t12에 도착한다.
+    KwzScenario s = make_kwz(/*service_k=*/8);
+    ASSERT_EQ(s.schedule.at(0), (TaskWindow{0, 8}));
+    PrioritizedPlanner planner(s.map, AStarConfig{}, fixed_first_idea3());
+
+    auto result = planner.replan(s.agents, s.previous_paths, s.schedule, {Cell{4, 2}},
+                                 /*current_time=*/3);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 1);
+    EXPECT_EQ(result->rescued_ids, std::vector<int>{0});
+    expect_conflict_free(result->paths);
+
+    const Path& k = result->paths.at(0);
+    for (int t = 0; t <= 8; ++t) {
+        EXPECT_EQ(k[static_cast<size_t>(t)], (SpaceTimeCell{4, 1, t})) << "작업 중(t" << t << ")에 움직임";
+    }
+    EXPECT_EQ(k[9], (SpaceTimeCell{4, 0, 9}));   // 작업이 끝난 뒤에 비킨다
+    EXPECT_EQ(k.back(), (SpaceTimeCell{4, 1, 10}));
+    EXPECT_EQ(result->paths.at(1).back(), (SpaceTimeCell{6, 2, 12}));
+    EXPECT_EQ(result->paths.at(2), s.previous_paths.at(2));  // Z는 그대로
+
+    // 근무표: K는 이미 도착했으므로 경로가 바뀌어도 [0, 8] 그대로. W는 새 도착 t12로.
+    EXPECT_EQ(result->schedule.at(0), (TaskWindow{0, 8}));
+    EXPECT_EQ(result->schedule.at(1), (TaskWindow{12, 12}));
+    EXPECT_EQ(result->schedule.at(2), (TaskWindow{0, 0}));
+
+    // 결과의 근무표를 다음 재계획에 그대로 넘길 수 있다. t10에는 아무도 장애물을 안 밟으므로
+    // 경로와 근무표가 그대로 돌아온다.
+    auto next = planner.replan(s.agents, result->paths, result->schedule, {Cell{4, 2}},
+                               /*current_time=*/10);
+    ASSERT_TRUE(next.has_value());
+    EXPECT_EQ(next->schedule.at(0), (TaskWindow{0, 8}));
+    EXPECT_EQ(next->schedule.at(1), (TaskWindow{12, 12}));
+}
+
+TEST(SelectiveReplanTest, ParkedAgentStepsAsideAsBefore) {
+    // 17장 17.5 경우 1. K의 작업 시간 2 → 근무표 [0, 2], t3에는 이미 주차 중.
+    // 16장과 똑같이 K는 t5에 (4,0)으로 비켰다가 t6에 돌아오고, W는 t8에 도착한다.
+    KwzScenario s = make_kwz(/*service_k=*/2);
+    PrioritizedPlanner planner(s.map, AStarConfig{}, fixed_first_idea3());
+
+    auto result = planner.replan(s.agents, s.previous_paths, s.schedule, {Cell{4, 2}},
+                                 /*current_time=*/3);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 1);
+    EXPECT_EQ(result->rescued_ids, std::vector<int>{0});
+    expect_conflict_free(result->paths);
+    EXPECT_EQ(result->paths.at(0),
+              (Path{SpaceTimeCell{4, 1, 0}, SpaceTimeCell{4, 1, 1}, SpaceTimeCell{4, 1, 2},
+                    SpaceTimeCell{4, 1, 3}, SpaceTimeCell{4, 1, 4}, SpaceTimeCell{4, 0, 5},
+                    SpaceTimeCell{4, 1, 6}}));
+    EXPECT_EQ(result->paths.at(1).back(), (SpaceTimeCell{6, 2, 8}));
+    EXPECT_EQ(result->schedule.at(0), (TaskWindow{0, 2}));
+    EXPECT_EQ(result->schedule.at(1), (TaskWindow{8, 8}));
+}
+
+TEST(SelectiveReplanTest, FullReplanKeepsWorkingAgentInPlace) {
+    // 전체 재계획(안전망·비교 기준)도 작업 중인 로봇을 움직이면 안 된다. W를 먼저 계획하도록
+    // 순서를 W, K, Z로 바꿨다(K가 먼저면 K가 그냥 머물러 W가 못 지나가 실패한다).
+    //   - K 작업 8(작업 중): W는 K의 작업이 끝난 뒤 t9에 (4,1)을 지나 t12 도착.
+    //   - K 작업 2(주차 중): W는 바로 t5에 (4,1)을 지나 t8 도착, K는 그 사이 비켜 준다.
+    for (int service_k : {8, 2}) {
+        KwzScenario s = make_kwz(service_k);
+        std::vector<Agent> w_first = {s.agents[1], s.agents[0], s.agents[2]};
+        PrioritizedPlanner planner(s.map);
+
+        auto result = planner.full_replan(w_first, s.previous_paths, s.schedule, {Cell{4, 2}},
+                                          /*current_time=*/3);
+
+        ASSERT_TRUE(result.has_value()) << "service_k=" << service_k;
+        expect_conflict_free(*result);
+        const Path& k = result->at(0);
+        int work_end = std::max(3, service_k);  // 작업이 끝나는 시각(이미 끝났으면 지금)
+        for (int t = 0; t <= work_end; ++t) {
+            EXPECT_EQ(k[static_cast<size_t>(t)], (SpaceTimeCell{4, 1, t}))
+                << "service_k=" << service_k << ", t" << t;
+        }
+        int w_arrival = service_k == 8 ? 12 : 8;
+        EXPECT_EQ(result->at(1).back(), (SpaceTimeCell{6, 2, w_arrival})) << "service_k=" << service_k;
+    }
+}
+
+TEST(SelectiveReplanTest, OldOverloadsRejectAgentsWithServiceTime) {
+    // 근무표 없이 부르는 예전 버전은 작업 시간이 있는 로봇이 있으면 거절해야 한다(17장 결정 10).
+    KwzScenario s = make_kwz(/*service_k=*/8);
+    PrioritizedPlanner planner(s.map);
+    EXPECT_THROW(planner.replan(s.agents, s.previous_paths, {Cell{4, 2}}, 3), std::invalid_argument);
+    EXPECT_THROW(planner.full_replan(s.agents, s.previous_paths, {Cell{4, 2}}, 3),
+                 std::invalid_argument);
+}
+
+TEST(SelectiveReplanTest, ReachabilityCheckCountsServiceTime) {
+    // ReachabilityCheckCountsTheTimeLimit에 작업 시간을 붙였다. 3x3 빈 격자, (0,1)->(2,1).
+    // t0에 (1,1)에 장애물 → 돌아가면 가장 빨리 t4 도착. max_timestep=5.
+    //   작업 1: 4 + 1 = 5 → 성공.   작업 2: 4 + 2 = 6 > 5 → 실패.
+    // 도달성 검사는 A*와 같은 규칙이어야 하므로, 전체 재계획도 똑같이 실패해야 한다.
+    Map map(3, 3);
+    AStarConfig config;
+    config.max_timestep = 5;
+    ReplanConfig with_check;
+    with_check.check_reachability = true;
+
+    for (int service : {1, 2}) {
+        std::vector<Agent> agents = {Agent{0, Cell{0, 1}, Cell{2, 1}, service}};
+        PrioritizedPlanner planner(map, config, with_check);
+        auto initial = planner.plan(agents);
+        ASSERT_TRUE(initial.has_value());
+        TaskSchedule schedule = schedule_from_plan(agents, *initial);
+
+        auto selective = planner.replan(agents, *initial, schedule, {Cell{1, 1}}, 0);
+        auto full = planner.full_replan(agents, *initial, schedule, {Cell{1, 1}}, 0);
+        if (service == 1) {
+            ASSERT_TRUE(selective.has_value());
+            EXPECT_EQ(selective->paths.at(0).back(), (SpaceTimeCell{2, 1, 5}));
+            EXPECT_TRUE(full.has_value());
+        } else {
+            EXPECT_FALSE(selective.has_value());
+            EXPECT_FALSE(full.has_value());
+        }
+    }
+}
+
+TEST(SelectiveReplanTest, WorkingAgentDoesNotWaitAnExtraStepForItsOwnReservation) {
+    // 작업 중인 로봇은 남은 작업 칸을 자기 이름으로 먼저 적어 둔다(결정 5). 자기 차례에 그 표시를
+    // 지우지 않으면 A*가 "목적지가 작업 끝 시각까지 예약돼 있다"고 보고 도착을 한 스텝 늦게
+    // 인정해서, 경로가 쓸데없이 한 칸 길어진다(release_ongoing_task가 막는 것).
+    // 장애물 없이 전체 재계획하면 아무도 K 자리를 지나가지 않으므로, K의 경로는 옛 경로(t8에서
+    // 작업 끝)와 똑같아야 한다.
+    KwzScenario s = make_kwz(/*service_k=*/8);
+    PrioritizedPlanner planner(s.map);
+
+    auto result = planner.full_replan(s.agents, s.previous_paths, s.schedule, {}, /*current_time=*/3);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->at(0), s.previous_paths.at(0));
+    EXPECT_EQ(result->at(0).back(), (SpaceTimeCell{4, 1, 8}));
+}

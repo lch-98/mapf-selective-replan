@@ -80,6 +80,7 @@ struct ReplanResult {
     std::vector<int> replanned_ids;    // 실제로 다시 탐색된 로봇 id 전부
     int escalation_tier{0};            // 0=Tier 0에서 끝남, 1+=그 단계까지 확장해서 성공, -1=전체 재계획 폴백
     std::vector<int> rescued_ids{};    // Tier 1+에서 새로 추가된 "구조 로봇" id 목록
+    TaskSchedule schedule{};           // 재계획 후의 근무표(17장 결정 9, update_schedule로 계산)
 };
 
 class PrioritizedPlanner {
@@ -107,6 +108,21 @@ public:
     // Tier 0(영향받은 로봇만) → Tier 1..max_escalation_tiers(막은 원인 로봇을
     // 추적해서 확장) → 안전망(전체 재계획, 현재 위치 기준)을 순서대로 시도한다.
     // 안전망까지도 실패하면 nullopt를 반환한다.
+    //
+    // 작업 시간(17장): previous_schedule은 previous_paths의 근무표다(처음 계획이면
+    // schedule_from_plan, 재계획 결과면 그 ReplanResult::schedule). 지금 작업 중인 로봇은
+    // 작업이 끝날 때까지 절대 움직이지 않고(구조 로봇으로 불려도 작업이 끝난 뒤에 비킨다),
+    // 결과의 schedule에 재계획 후의 근무표를 담는다. previous_schedule에 없는 로봇이 있으면
+    // std::out_of_range를 던진다.
+    std::optional<ReplanResult> replan(const std::vector<Agent>& agents,
+                                        const PlanResult& previous_paths,
+                                        const TaskSchedule& previous_schedule,
+                                        const std::vector<Cell>& new_obstacles,
+                                        int current_time);
+
+    // 근무표 없이 부르는 예전 버전. 모든 로봇의 작업 시간이 0일 때만 쓸 수 있다 — 이때는
+    // "도착 = 작업 끝"이라 근무표를 경로에서 바로 만들 수 있다. 작업 시간이 있는 로봇이 있으면
+    // 경로에서 근무표를 추측하면 조용히 틀릴 수 있으므로(17장 결정 3) std::invalid_argument를 던진다.
     std::optional<ReplanResult> replan(const std::vector<Agent>& agents,
                                         const PlanResult& previous_paths,
                                         const std::vector<Cell>& new_obstacles,
@@ -120,6 +136,16 @@ public:
     // 벤치마크에서 "전체 재계획 베이스라인"을 만들 때 쓴다 — replan()의
     // 선택적 재계획과 공정하게 비교하려면, 베이스라인도 "맨 처음 출발점"이
     // 아니라 "지금 로봇이 있는 위치"부터 다시 계획해야 하기 때문이다.
+    //
+    // 작업 중인 로봇은 여기서도 작업이 끝날 때까지 움직이지 않는다. 재계획 후 근무표는
+    // update_schedule(agents, previous_schedule, 결과, current_time)로 만든다.
+    std::optional<PlanResult> full_replan(const std::vector<Agent>& agents,
+                                          const PlanResult& previous_paths,
+                                          const TaskSchedule& previous_schedule,
+                                          const std::vector<Cell>& new_obstacles,
+                                          int current_time);
+
+    // 근무표 없이 부르는 예전 버전. replan의 예전 버전과 같은 규칙(작업 시간이 전부 0일 때만).
     std::optional<PlanResult> full_replan(const std::vector<Agent>& agents,
                                           const PlanResult& previous_paths,
                                           const std::vector<Cell>& new_obstacles,
@@ -160,6 +186,20 @@ private:
     // Tier 1의 get_owner 추적에서 "구조 로봇 후보"로 잘못 잡히지 않는다.
     void reserve_new_obstacles(const std::vector<Cell>& new_obstacles, int current_time);
 
+    // 17장 결정 5: 지금(current_time) 작업 중인 로봇마다, 남은 작업 칸(current_time ~ 작업 끝)을
+    // 그 로봇 이름으로 장부에 먼저 적는다. 그래야 그 로봇이 구조 로봇이 되어 뒤 차례에 계획되더라도,
+    // 앞 차례 로봇의 A*가 작업 중인 칸을 비어 있다고 보고 지나가지 않는다. 고정 로봇은 어차피 옛
+    // 경로 전체를 적으므로 같은 칸을 한 번 더 적는 셈이고(자기 칸이라 문제없다), 작업 중인 칸에
+    // 새 장애물이 생기는 등 이미 남이 차지한 칸이 있으면 false를 돌려준다.
+    bool reserve_ongoing_tasks(const std::vector<Agent>& agents, const PlanResult& previous_paths,
+                               const TaskSchedule& schedule, int current_time);
+
+    // 작업 중인 로봇이 자기 차례에 A*를 돌리기 직전에, 자기가 먼저 적어 둔 남은 작업 칸을 지운다.
+    // 안 지우면 A*가 "목적지가 작업 끝 시각까지 예약돼 있다"고 보고(자기 예약인데도) 도착을 한
+    // 스텝 늦게 인정한다. 지운 칸은 바로 뒤 register_path가 새 경로(남은 작업 칸 포함)로 다시 적는다.
+    void release_ongoing_task(const Agent& agent, const Path& old_path, const TaskWindow& window,
+                              int current_time);
+
     // working_ids에 속한 로봇만 current_time 시점의 위치에서 원래 목적지까지 다시
     // 탐색한다. working_ids에 없는 로봇은 previous_paths의 기존 경로를 그대로
     // 장벽으로 등록한다(06장 6.4절 2단계, 6.6.1절 "구조 로봇의 과거 경로를 장벽으로
@@ -181,6 +221,7 @@ private:
     std::optional<PlanResult> try_replan_set(const std::vector<Agent>& agents,
                                              const PlanResult& previous_paths,
                                              const std::vector<int>& working_ids,
+                                             const TaskSchedule& schedule,
                                              const std::vector<Cell>& new_obstacles,
                                              int current_time,
                                              std::vector<SpaceTimeCell>* out_blocked,

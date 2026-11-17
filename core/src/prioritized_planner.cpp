@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <queue>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 namespace mapf {
@@ -76,6 +77,47 @@ std::vector<Cell> static_shortest_path(const Map& map, Cell from, Cell to,
     }
     std::reverse(route.begin(), route.end());
     return route;
+}
+
+// 재계획에서 로봇 한 대를 "몇 시부터, 작업을 얼마나 남기고" 다시 계획하는지(17장 결정 6).
+struct ReplanStart {
+    int time;     // 이 시각의 위치에서 A*를 시작한다. 이 시각 전의 옛 경로는 그대로 둔다
+    int service;  // A*에 넘기는 작업 시간(도착하면 이만큼 목적지에 머문다)
+};
+
+ReplanStart replan_start(const Agent& agent, const TaskWindow& window, int current_time) {
+    switch (task_state_at(window, current_time)) {
+        case TaskState::kMoving:   // 아직 도착 전: 지금부터, 도착하면 작업해야 한다
+            return ReplanStart{current_time, agent.service_time};
+        case TaskState::kWorking:  // 작업 중: 작업이 끝나는 시각부터. 작업은 이미 하고 있다
+            return ReplanStart{window.end, 0};
+        case TaskState::kParked:   // 주차 중: 지금부터. 작업은 이미 끝났다
+            break;
+    }
+    return ReplanStart{current_time, 0};
+}
+
+// 근무표 없이 부르는 예전 replan/full_replan용. 작업 시간이 하나라도 있으면 거절한다.
+void require_zero_service(const std::vector<Agent>& agents, const char* function_name) {
+    for (const Agent& agent : agents) {
+        if (agent.service_time != 0) {
+            throw std::invalid_argument(std::string("PrioritizedPlanner::") + function_name +
+                                        ": agents with service_time need a TaskSchedule "
+                                        "(use the overload that takes previous_schedule)");
+        }
+    }
+}
+
+// 작업 시간이 전부 0일 때의 근무표: 도착 = 작업 끝 = 경로 끝. 작업 중인 순간이 없으므로
+// window_from_path처럼 경로 모양을 검사할 필요가 없다(실패 후 멈춰 선 경로처럼 목적지에서
+// 끝나지 않는 경로가 와도 예전과 똑같이 동작한다).
+TaskSchedule zero_service_schedule(const std::vector<Agent>& agents, const PlanResult& paths) {
+    TaskSchedule schedule;
+    for (const Agent& agent : agents) {
+        int end = paths.at(agent.id).back().t;
+        schedule[agent.id] = TaskWindow{end, end};
+    }
+    return schedule;
 }
 
 }  // namespace
@@ -212,15 +254,43 @@ void PrioritizedPlanner::reserve_new_obstacles(const std::vector<Cell>& new_obst
     }
 }
 
+bool PrioritizedPlanner::reserve_ongoing_tasks(const std::vector<Agent>& agents,
+                                               const PlanResult& previous_paths,
+                                               const TaskSchedule& schedule, int current_time) {
+    for (const Agent& agent : agents) {
+        const TaskWindow& window = schedule.at(agent.id);
+        if (task_state_at(window, current_time) != TaskState::kWorking) continue;
+        const Path& old_path = previous_paths.at(agent.id);
+        // 작업 중인 로봇은 옛 경로상 이 구간 내내 목적지에 있다. 장부는 "실제 위치"를 적는
+        // 곳이므로 옛 경로의 칸을 그대로 적는다.
+        for (int t = current_time; t <= window.end; ++t) {
+            Cell here = position_at(old_path, t);
+            if (!table_.reserve_if_unowned(here.x, here.y, t, agent.id)) return false;
+        }
+    }
+    return true;
+}
+
+void PrioritizedPlanner::release_ongoing_task(const Agent& agent, const Path& old_path,
+                                              const TaskWindow& window, int current_time) {
+    if (task_state_at(window, current_time) != TaskState::kWorking) return;
+    for (int t = current_time; t <= window.end; ++t) {
+        Cell here = position_at(old_path, t);
+        table_.unreserve_if_owned_by(here.x, here.y, t, agent.id);
+    }
+}
+
 std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<Agent>& agents,
                                               const PlanResult& previous_paths,
                                               const std::vector<int>& working_ids,
+                                              const TaskSchedule& schedule,
                                               const std::vector<Cell>& new_obstacles,
                                               int current_time,
                                               std::vector<SpaceTimeCell>* out_blocked,
                                               std::optional<int>* out_blocked_owner) {
     table_.clear();
     reserve_new_obstacles(new_obstacles, current_time);
+    if (!reserve_ongoing_tasks(agents, previous_paths, schedule, current_time)) return std::nullopt;
 
     PlanResult result;
 
@@ -288,11 +358,18 @@ std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<A
         // 계산되어야만, 자기 옛 자리를 고집하지 않고 실제로 길을 비켜줄 수
         // 있다 — 옛 경로(특히 Tail Reservation)를 그대로 장벽으로 세워두면
         // "구조"라는 이름이 무색하게 아무 자리도 안 비켜주는 셈이 된다.
+        //
+        // 작업 중인 로봇은 작업이 끝나는 시각부터 다시 계획한다(17장 결정 6). 그 전까지는 옛 경로
+        // 그대로(목적지에서 작업) 두고, 이어붙일 때도 그 시각을 기준으로 한다.
         const Path& old_path = previous_paths.at(agent.id);
-        Cell here = position_at(old_path, current_time);
+        const TaskWindow& window = schedule.at(agent.id);
+        ReplanStart start = replan_start(agent, window, current_time);
+        Cell here = position_at(old_path, start.time);
 
+        release_ongoing_task(agent, old_path, window, current_time);
         SpaceTimeAStar astar(map_, table_, config_);
-        AStarResult astar_result = astar.search_with_diagnostics(here, agent.goal, current_time);
+        AStarResult astar_result =
+            astar.search_with_diagnostics(here, agent.goal, start.time, start.service);
 
         if (!astar_result.path.has_value()) {
             if (out_blocked != nullptr) {
@@ -302,7 +379,7 @@ std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<A
                 // 방식 그대로 둔다 — 그렇지 않으면 Tier가 아무도 못 불러오고 끝나 버린다.
                 if (replan_config_.rescue_selection == RescueSelection::kShortestPathConflicts) {
                     std::vector<SpaceTimeCell> conflicts =
-                        shortest_path_conflicts(here, agent.goal, new_obstacles, current_time);
+                        shortest_path_conflicts(here, agent.goal, new_obstacles, start.time);
                     bool has_new_candidate = false;
                     for (const SpaceTimeCell& cell : conflicts) {
                         std::optional<int> owner = table_.get_owner(cell.x, cell.y, cell.t);
@@ -317,8 +394,8 @@ std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<A
             return std::nullopt;
         }
 
-        // 과거 구간(0~current_time-1)과 새로 찾은 미래 구간을 이어붙인다.
-        Path full_path = splice_paths(old_path, *astar_result.path, current_time);
+        // 옛 경로의 start.time 전 구간(과거, 그리고 작업 중이면 남은 작업)과 새로 찾은 경로를 이어붙인다.
+        Path full_path = splice_paths(old_path, *astar_result.path, start.time);
 
         if (!register_path(agent.id, full_path)) return std::nullopt;
         result[agent.id] = full_path;
@@ -365,20 +442,37 @@ std::optional<PlanResult> PrioritizedPlanner::full_replan(const std::vector<Agen
                                            const PlanResult& previous_paths,
                                            const std::vector<Cell>& new_obstacles,
                                            int current_time) {
+    require_zero_service(agents, "full_replan");
+    return full_replan(agents, previous_paths, zero_service_schedule(agents, previous_paths),
+                       new_obstacles, current_time);
+}
+
+std::optional<PlanResult> PrioritizedPlanner::full_replan(const std::vector<Agent>& agents,
+                                           const PlanResult& previous_paths,
+                                           const TaskSchedule& previous_schedule,
+                                           const std::vector<Cell>& new_obstacles,
+                                           int current_time) {
     table_.clear();
     reserve_new_obstacles(new_obstacles, current_time);
+    // 모든 로봇을 다시 계획하지만, 작업 중인 로봇은 여기서도 작업이 끝날 때까지 안 움직인다.
+    if (!reserve_ongoing_tasks(agents, previous_paths, previous_schedule, current_time)) {
+        return std::nullopt;
+    }
 
     PlanResult result;
 
     for (const Agent& agent : agents) {
         const Path& old_path = previous_paths.at(agent.id);
-        Cell here = position_at(old_path, current_time);
+        const TaskWindow& window = previous_schedule.at(agent.id);
+        ReplanStart start = replan_start(agent, window, current_time);
+        Cell here = position_at(old_path, start.time);
 
+        release_ongoing_task(agent, old_path, window, current_time);
         SpaceTimeAStar astar(map_, table_, config_);
-        std::optional<Path> new_future = astar.search(here, agent.goal, current_time);
+        std::optional<Path> new_future = astar.search(here, agent.goal, start.time, start.service);
         if (!new_future.has_value()) return std::nullopt;
 
-        Path full_path = splice_paths(old_path, *new_future, current_time);
+        Path full_path = splice_paths(old_path, *new_future, start.time);
 
         if (!register_path(agent.id, full_path)) return std::nullopt;
         result[agent.id] = full_path;
@@ -389,6 +483,16 @@ std::optional<PlanResult> PrioritizedPlanner::full_replan(const std::vector<Agen
 
 std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>& agents,
                                          const PlanResult& previous_paths,
+                                         const std::vector<Cell>& new_obstacles,
+                                         int current_time) {
+    require_zero_service(agents, "replan");
+    return replan(agents, previous_paths, zero_service_schedule(agents, previous_paths),
+                  new_obstacles, current_time);
+}
+
+std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>& agents,
+                                         const PlanResult& previous_paths,
+                                         const TaskSchedule& previous_schedule,
                                          const std::vector<Cell>& new_obstacles,
                                          int current_time) {
     // 1단계: 영향받는 로봇 판별 (06장 6.4절).
@@ -403,13 +507,17 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
             // 어떤 로봇을 불러와도, 전체 재계획을 해도 이 로봇의 A*는 반드시 실패한다.
             // 그러니 Tier와 안전망을 헛돌지 않고 바로 실패를 알린다. 구조 로봇은 검사할
             // 필요가 없다 — 옛 경로가 새 장애물을 안 밟으므로 그 자체가 갈 수 있다는 증거다.
+            // 작업 시간이 있으면 "가장 빨리 도착 + 작업"이 시간 안에 끝나야 한다(17장 결정 8). A*의
+            // 도착 규칙과 똑같아야 "결과는 안 바꾸고 시간만 아낀다"가 유지된다.
             if (replan_config_.check_reachability) {
-                Cell here = position_at(old_path, current_time);
+                ReplanStart start =
+                    replan_start(agent, previous_schedule.at(agent.id), current_time);
+                Cell here = position_at(old_path, start.time);
                 std::vector<Cell> route =
                     static_shortest_path(map_, here, agent.goal, new_obstacles);
                 if (route.empty()) return std::nullopt;
-                int earliest_arrival = current_time + static_cast<int>(route.size()) - 1;
-                if (earliest_arrival > config_.max_timestep) return std::nullopt;
+                int earliest_arrival = start.time + static_cast<int>(route.size()) - 1;
+                if (earliest_arrival + start.service > config_.max_timestep) return std::nullopt;
             }
         }
     }
@@ -418,6 +526,7 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
     if (working_ids.empty()) {
         ReplanResult result;
         result.paths = previous_paths;
+        result.schedule = previous_schedule;
         result.escalation_tier = 0;
         return result;
     }
@@ -429,8 +538,8 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
         std::vector<SpaceTimeCell> blocked; // try_replan_set() -> out_blocked (working_ids에 포함된 로봇 경로계획 실패시)
         std::optional<int> blocked_owner;   // try_replan_set() -> out_blocked_owner (working_ids에 포함되지 않은 로봇 경로계획 실패시)
         std::optional<PlanResult> attempt = try_replan_set(
-            agents, previous_paths, working_ids, new_obstacles, current_time, &blocked,
-            &blocked_owner);
+            agents, previous_paths, working_ids, previous_schedule, new_obstacles, current_time,
+            &blocked, &blocked_owner);
 
         if (attempt.has_value()) {
             ReplanResult result;
@@ -438,6 +547,8 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
             result.replanned_ids = working_ids;
             result.escalation_tier = tier;
             result.rescued_ids = rescued_ids;
+            result.schedule =
+                update_schedule(agents, previous_schedule, result.paths, current_time);
             return result;
         }
 
@@ -477,13 +588,14 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
 
     // 3단계: 안전망 — 전체 재계획(현재 위치 기준).
     std::optional<PlanResult> fallback =
-        full_replan(agents, previous_paths, new_obstacles, current_time);
+        full_replan(agents, previous_paths, previous_schedule, new_obstacles, current_time);
     if (!fallback.has_value()) return std::nullopt;
 
     ReplanResult result;
     result.paths = *fallback;
     for (const Agent& agent : agents) result.replanned_ids.push_back(agent.id);
     result.escalation_tier = -1;
+    result.schedule = update_schedule(agents, previous_schedule, result.paths, current_time);
     return result;
 }
 
