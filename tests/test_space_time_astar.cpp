@@ -4,6 +4,8 @@
 // 04_space_time_astar.md에서 설명한 SpaceTimeAStar의 동작을 확인한다.
 // ─────────────────────────────────────────────────────────────────
 #include <gtest/gtest.h>
+
+#include <algorithm>
 #include "mapf/space_time_astar.hpp"
 
 using namespace mapf;
@@ -233,4 +235,98 @@ TEST(SpaceTimeAStarTest, ExpandedCountsEveryStateCheckedBeforeFailing) {
     AStarResult stuck = walled.search_with_diagnostics(Cell{0, 0}, Cell{2, 0});
     EXPECT_FALSE(stuck.path.has_value());
     EXPECT_EQ(stuck.expanded, 11);
+}
+
+// ───────────────────────────────────────────────────────────────
+// 18장 2-2단계 — 장부가 굳은 뒤에는 같은 칸을 한 번만 확인
+// ───────────────────────────────────────────────────────────────
+
+namespace {
+
+// 막힌 칸 목록에서 주인(로봇 id)을 처음 나온 순서대로 뽑는다(장애물 -1은 뺀다). 구조 로봇을 고를 때
+// 쓰는 것과 같은 정보다.
+std::vector<int> owners_in_order(const AStarResult& result, const ReservationTable& table) {
+    std::vector<int> owners;
+    for (const SpaceTimeCell& c : result.blocked_attempts) {
+        std::optional<int> owner = table.get_owner(c.x, c.y, c.t);
+        if (!owner.has_value() || *owner == -1) continue;
+        if (std::find(owners.begin(), owners.end(), *owner) == owners.end()) owners.push_back(*owner);
+    }
+    return owners;
+}
+
+}  // namespace
+
+TEST(SpaceTimeAStarTest, SettledTableChecksEachCellOnceAfterItSettles) {
+    // ExpandedCountsEveryStateCheckedBeforeFailing과 같은 상황: 1x3 통로, 가운데 (1,0)이 t0부터 끝까지
+    // 막혀 있다(다른 로봇이 서 있음). 장부는 t0부터 한 번도 안 바뀌므로 굳는 시각은 0이다.
+    //   - 굳는 시각을 모르면: 출발 칸 (0,0)을 t0~t10까지 11번 확인한 뒤 실패.
+    //   - 굳는 시각 0을 알려 주면: (0,0)에서 기다려 봐야 같은 그림이므로 1번만 확인하고 실패.
+    Map map(3, 1);
+    AStarConfig config;
+    config.max_timestep = 10;
+    ReservationTable unknown;
+    for (int t = 0; t <= config.max_timestep; ++t) unknown.reserve(1, 0, t, /*agent_id=*/7);
+    ReservationTable settled = unknown;
+    settled.mark_settled_from(0);
+
+    AStarResult slow = SpaceTimeAStar(map, unknown, config).search_with_diagnostics(Cell{0, 0}, Cell{2, 0});
+    AStarResult fast = SpaceTimeAStar(map, settled, config).search_with_diagnostics(Cell{0, 0}, Cell{2, 0});
+
+    EXPECT_FALSE(slow.path.has_value());
+    EXPECT_FALSE(fast.path.has_value());
+    EXPECT_EQ(slow.expanded, 11);
+    EXPECT_EQ(fast.expanded, 1);
+    EXPECT_EQ(owners_in_order(fast, settled), owners_in_order(slow, unknown));  // 둘 다 {7}
+}
+
+TEST(SpaceTimeAStarTest, SettledTableKeepsPathWhenWaitingIsNeededBeforeItSettles) {
+    // 5x1 통로, (0,0) → (4,0). 다른 로봇(7번)이 t0~t3 동안 (2,0)에 있다가 사라진다(장부가 t4에 바뀜 →
+    // 굳는 시각 4). 로봇은 굳기 전에 기다려야 한다: (2,0)에 가장 빨리 t4에 들어가 t6에 도착.
+    // 굳기 전에는 지금처럼 시각마다 확인하므로, 굳는 시각을 알려 줘도 경로가 똑같아야 한다.
+    Map map(5, 1);
+    ReservationTable unknown;
+    for (int t = 0; t <= 3; ++t) unknown.reserve(2, 0, t, /*agent_id=*/7);
+    ReservationTable settled = unknown;
+    settled.mark_settled_from(4);
+
+    AStarResult a = SpaceTimeAStar(map, unknown).search_with_diagnostics(Cell{0, 0}, Cell{4, 0});
+    AStarResult b = SpaceTimeAStar(map, settled).search_with_diagnostics(Cell{0, 0}, Cell{4, 0});
+
+    ASSERT_TRUE(a.path.has_value());
+    ASSERT_TRUE(b.path.has_value());
+    EXPECT_EQ(*a.path, *b.path);
+    EXPECT_EQ(b.path->back(), (SpaceTimeCell{4, 0, 6}));
+    EXPECT_LE(b.expanded, a.expanded);
+}
+
+TEST(SpaceTimeAStarTest, SettledTableBoundsWorkWhenEnclosedAndKeepsBlockers) {
+    //   y=0:  . . . . .     ← 로봇이 갇히는 윗줄(빈 칸 5개). (4,0)은 8번 로봇이 t2~t4에 지나감
+    //   y=1:  # # . # #     ← 유일한 통로 (2,1)에 7번 로봇이 t0부터 끝까지 서 있음
+    //   y=2:  . . . . .
+    // 로봇은 (0,0) → (0,2). 7번 때문에 절대 못 간다. 장부는 8번이 사라지는 t5부터 굳는다.
+    //   - 굳는 시각을 모르면: 윗줄 5칸을 t0~t20의 모든 시각마다 확인한다.
+    //   - 굳는 시각 5를 알려 주면: t0~t5의 6개 층만 확인 → 5칸 × 6층 = 30개 이하.
+    // 그리고 막은 로봇 목록(구조 후보)과 그 순서는 같아야 한다(18장 18.4).
+    Map map(std::vector<std::string>{
+        ".....",
+        "##.##",
+        ".....",
+    });
+    AStarConfig config;
+    config.max_timestep = 20;
+    ReservationTable unknown;
+    for (int t = 0; t <= config.max_timestep; ++t) unknown.reserve(2, 1, t, /*agent_id=*/7);
+    for (int t = 2; t <= 4; ++t) unknown.reserve(4, 0, t, /*agent_id=*/8);
+    ReservationTable settled = unknown;
+    settled.mark_settled_from(5);
+
+    AStarResult slow = SpaceTimeAStar(map, unknown, config).search_with_diagnostics(Cell{0, 0}, Cell{0, 2});
+    AStarResult fast = SpaceTimeAStar(map, settled, config).search_with_diagnostics(Cell{0, 0}, Cell{0, 2});
+
+    EXPECT_FALSE(slow.path.has_value());
+    EXPECT_FALSE(fast.path.has_value());
+    EXPECT_LE(fast.expanded, 5 * 6);
+    EXPECT_LT(fast.expanded, slow.expanded);
+    EXPECT_EQ(owners_in_order(fast, settled), owners_in_order(slow, unknown));
 }

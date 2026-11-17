@@ -107,12 +107,29 @@ public:
     // 타임스텝 t→t+1 사이의 (x1,y1)→(x2,y2) 이동이 막혀 있는가?
     bool is_edge_occupied(int x1, int y1, int x2, int y2, int t) const;
 
-    // 테이블 전체를 비운다.
+    // 테이블 전체를 비운다. 굳는 시각도 다시 "모름"이 된다.
     void clear();
+
+    // ── 장부가 굳는 시각(18장) ─────────────────────────────────────
+    // "이 시각부터는 어느 칸·이동의 예약도 더 이상 바뀌지 않는다"는 시각. 도착한 로봇은 끝까지
+    // 목적지에 머물고(Tail) 장애물도 그대로라서, 마지막 로봇이 도착하고 나면 장부는 같은 그림의
+    // 반복이 된다. A*는 이 시각 뒤로는 같은 칸을 한 번만 확인한다.
+    //
+    // 장부는 자기가 언제 굳는지 스스로 알 수 없다(어떤 예약이 Tail인지 모른다). 그래서 장부를 채우는
+    // 쪽(PrioritizedPlanner)이 적을 때마다 mark_settled_from으로 알려 준다. 아무도 안 알려 주면
+    // "모름"(nullopt)이고, A*는 예전처럼 시각마다 따로 확인한다.
+    //
+    // 실제보다 크게 알려 주는 건 안전하다(묶는 층이 줄 뿐). 작게 알려 주면 아직 바뀌는 층을 같은
+    // 그림으로 착각해서 틀린다. 그래서 알려 준 값 중 가장 큰 값을 쓴다.
+    std::optional<int> settled_from() const;
+
+    // "적어도 t 전까지는 바뀔 수 있다"를 알린다. 지금까지 알려진 값과 t 중 큰 쪽이 된다.
+    void mark_settled_from(int t);
 
 private:
     std::unordered_map<VertexKey, int, VertexKeyHash> vertices_;
     std::unordered_set<EdgeKey, EdgeKeyHash> edges_;
+    std::optional<int> settled_from_;
 };
 
 }  // namespace mapf

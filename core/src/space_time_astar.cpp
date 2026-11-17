@@ -116,6 +116,16 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
 
     unsigned long long next_order = 0;  // 큐에 넣은 순서 번호(동점 처리 3순위)
 
+    // 장부가 굳는 시각(18장). 그 뒤로는 장부가 같은 그림의 반복이라, 같은 칸에 일찍 도착한 쪽이
+    // 그 자리에서 기다리기만 하면 늦게 도착한 쪽이 할 수 있는 모든 걸 할 수 있다. 그래서 t >= 굳는
+    // 시각인 상태는 (x, y, 굳는 시각)으로 묶어서 기억하고, 칸마다 처음 꺼낸(가장 이른) 것만 확인한다.
+    // 장부가 굳는 시각을 모르면 예전처럼 (x, y, t) 그대로 기억한다.
+    const std::optional<int> settled = reservations_.settled_from();
+    auto memory_key = [&settled](const SpaceTimeCell& c) {
+        if (settled.has_value() && c.t > *settled) return SpaceTimeCell{c.x, c.y, *settled};
+        return c;
+    };
+
     auto start_node = std::make_shared<Node>();
     start_node->cell = SpaceTimeCell{start.x, start.y, start_time};
     start_node->g = 0;
@@ -128,8 +138,8 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
         std::shared_ptr<Node> current = open.top();
         open.pop();
 
-        if (visited.count(current->cell)) continue;
-        visited.insert(current->cell);
+        if (visited.count(memory_key(current->cell))) continue;
+        visited.insert(memory_key(current->cell));
         ++result.expanded;
 
         Cell current_xy{current->cell.x, current->cell.y};
@@ -175,7 +185,7 @@ AStarResult SpaceTimeAStar::search_with_diagnostics(Cell start, Cell goal, int s
             }
             // 위 visited.insert()로 최적의 g값을 가지는 칸을 선점 했으므로, 즉 최적의 칸을 저장
             // 아래 visited.count()는 이미 visited 안의 최적의 칸을 넘어간다는 뜻 (불필요한 연산을 줄이는 최적화)
-            if (visited.count(next_cell)) continue;
+            if (visited.count(memory_key(next_cell))) continue;
 
             auto next_node = std::make_shared<Node>();
             next_node->cell = next_cell;

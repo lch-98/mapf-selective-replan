@@ -126,6 +126,10 @@ PrioritizedPlanner::PrioritizedPlanner(const Map& map, AStarConfig config, Repla
     : map_(map), config_(config), replan_config_(replan_config) {}
 
 bool PrioritizedPlanner::register_path(int agent_id, const Path& path) {
+    // 장부가 굳는 시각(18장): 이 경로는 끝 시각부터 목적지에 계속 머물고(Tail), 이동 예약도 끝 시각
+    // 전에서 끝나므로, 이 경로 때문에 장부가 바뀌는 건 끝 시각까지다. 등록이 중간에 거절돼도 이미
+    // 적은 칸이 있을 수 있으므로 적기 전에 알린다.
+    table_.mark_settled_from(path.back().t);
     // 경로의 모든 칸(vertex)과 모든 이동(edge)을 등록한다.
     //
     // vertex 등록에 reserve_if_unowned를 쓰는 이유: 이 경로는 A*가 이미
@@ -247,6 +251,8 @@ void PrioritizedPlanner::reserve_new_obstacles(const std::vector<Cell>& new_obst
     // max_timestep까지 계속 점유된 것으로 등록한다. agent_id를 생략해
     // owner=-1("주인 모름")로 기록한다 — 이건 로봇이 아니라 정적 장애물이므로
     // Tier 1의 get_owner 추적 대상에서 자연히 제외된다(06장 6.6절 3단계).
+    // 장애물은 current_time부터 끝까지 그대로라, 장부를 바꾸는 건 current_time 한 번이다(18장).
+    table_.mark_settled_from(current_time);
     for (const Cell& obstacle : new_obstacles) {
         for (int t = current_time; t <= config_.max_timestep; ++t) {
             table_.reserve(obstacle.x, obstacle.y, t);
@@ -261,6 +267,9 @@ bool PrioritizedPlanner::reserve_ongoing_tasks(const std::vector<Agent>& agents,
         const TaskWindow& window = schedule.at(agent.id);
         if (task_state_at(window, current_time) != TaskState::kWorking) continue;
         const Path& old_path = previous_paths.at(agent.id);
+        // 이 표시는 작업 끝 시각까지만 있고 그다음 시각에 사라진다 — 사라지는 것도 장부가 바뀌는
+        // 것이므로, 장부는 작업 끝 + 1부터 굳는다(18장).
+        table_.mark_settled_from(window.end + 1);
         // 작업 중인 로봇은 옛 경로상 이 구간 내내 목적지에 있다. 장부는 "실제 위치"를 적는
         // 곳이므로 옛 경로의 칸을 그대로 적는다.
         for (int t = current_time; t <= window.end; ++t) {

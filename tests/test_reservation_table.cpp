@@ -111,3 +111,20 @@ TEST(ReservationTableTest, ClearRemovesAllReservations) {
     EXPECT_FALSE(table.is_occupied(1, 1, 0));
     EXPECT_FALSE(table.is_edge_occupied(1, 1, 2, 1, 0));
 }
+
+TEST(ReservationTableTest, SettledFromStartsUnknownKeepsMaximumAndResetsOnClear) {
+    // 18장: 장부가 굳는 시각. 아무도 안 알려 주면 "모름", 알려 준 값 중 가장 큰 값을 쓴다
+    // (크게 잡는 건 안전하고 작게 잡으면 틀리므로), clear()하면 다시 "모름".
+    ReservationTable table;
+    EXPECT_FALSE(table.settled_from().has_value());
+
+    table.mark_settled_from(5);
+    EXPECT_EQ(table.settled_from(), 5);
+    table.mark_settled_from(3);  // 더 작은 값은 무시
+    EXPECT_EQ(table.settled_from(), 5);
+    table.mark_settled_from(8);
+    EXPECT_EQ(table.settled_from(), 8);
+
+    table.clear();
+    EXPECT_FALSE(table.settled_from().has_value());
+}

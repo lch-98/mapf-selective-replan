@@ -56,6 +56,13 @@ bool ReservationTable::is_edge_occupied(int x1, int y1, int x2, int y2, int t) c
 void ReservationTable::clear() {
     vertices_.clear();
     edges_.clear();
+    settled_from_.reset();
+}
+
+std::optional<int> ReservationTable::settled_from() const { return settled_from_; }
+
+void ReservationTable::mark_settled_from(int t) {
+    if (!settled_from_.has_value() || t > *settled_from_) settled_from_ = t;
 }
 
 }  // namespace mapf
