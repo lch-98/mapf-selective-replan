@@ -172,6 +172,9 @@ class ReplanResult:
     schedule: TaskSchedule
     """재계획 후의 근무표. 다음 replan()에 previous_schedule로 그대로 넘긴다."""
 
+    yielded_ids: List[int]
+    """비켜 달라고 해서 결과에 쓰인 로봇 id(19장, ReplanConfig.request_yield를 켰을 때만)."""
+
 class PrioritizedPlanner:
     """고정 우선순위 계획(Prioritized Planning, PP). 우선순위는 agents 리스트의 순서
     그대로다. 예전 이름은 PBS였다(순서를 탐색하는 진짜 PBS와 달라서 이름을 바꿈)."""

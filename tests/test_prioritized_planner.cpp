@@ -1073,3 +1073,114 @@ TEST(SelectiveReplanTest, WorkingAgentDoesNotWaitAnExtraStepForItsOwnReservation
     EXPECT_EQ(result->at(0), s.previous_paths.at(0));
     EXPECT_EQ(result->at(0).back(), (SpaceTimeCell{4, 1, 8}));
 }
+
+// ───────────────────────────────────────────────────────────────
+// 19장 — 문제 3: 크게 돌아가게 됐으면 서 있는 로봇에게 "비켜 줘"를 한 번 시도(request_yield)
+//
+//   y=0:  . . . . . . .     ← 먼 길(윗줄)
+//   y=1:  . # # # # # .
+//   y=2:  W . . X . . G     ← W(0번): (0,2)→(6,2) 가운데 줄 직진. t1에 (3,2)에 장애물 X
+//   y=3:  # # . P . # #     ← 짧은 길. P(1번)가 목적지 (3,3)에 t0부터 서 있음(작업 service_p)
+//   y=4:  # # # . # # #     ← (3,4): P가 비켜설 수 있는 칸
+// t1에 W는 (1,2). 짧은 길 (2,2)(2,3)(3,3)(4,3)(4,2)(5,2)(6,2)로 가면 t8, 윗줄로 돌아가면 t12.
+// ───────────────────────────────────────────────────────────────
+
+namespace {
+
+struct YieldScenario {
+    Map map{std::vector<std::string>{
+        ".......",
+        ".#####.",
+        ".......",
+        "##...##",
+        "###.###",
+    }};
+    std::vector<Agent> agents;
+    PlanResult previous_paths;
+    TaskSchedule schedule;
+};
+
+YieldScenario make_yield_scenario(int service_p) {
+    YieldScenario s;
+    s.agents = {
+        Agent{0, Cell{0, 2}, Cell{6, 2}},             // W
+        Agent{1, Cell{3, 3}, Cell{3, 3}, service_p},  // P
+    };
+    Path w_path;
+    for (int t = 0; t <= 6; ++t) w_path.push_back(SpaceTimeCell{t, 2, t});
+    s.previous_paths[0] = w_path;
+    Path p_path;
+    for (int t = 0; t <= service_p; ++t) p_path.push_back(SpaceTimeCell{3, 3, t});
+    s.previous_paths[1] = p_path;
+    s.schedule = schedule_from_plan(s.agents, s.previous_paths);
+    return s;
+}
+
+ReplanConfig fixed_first_idea3_yield(bool request_yield) {
+    ReplanConfig config;
+    config.order = ReplanOrder::kFixedFirst;
+    config.check_reachability = true;
+    config.rescue_selection = RescueSelection::kShortestPathConflicts;
+    config.request_yield = request_yield;
+    return config;
+}
+
+}  // namespace
+
+TEST(SelectiveReplanTest, ParkedRobotYieldsWhenThatIsCheaper) {
+    // P는 주차 중(작업 0). 스위치를 끄면 W는 P를 피해 윗줄로 돌아 t12에 도착한다(문제 3).
+    // 켜면 P에게 비켜 달라고 해서 W는 짧은 길로 t8에 도착하고, P는 잠깐 비켰다가 돌아온다.
+    // 목적지 밖에 있는 시간의 합: 끄면 W 11 + P 0 = 11, 켜면 W 7 + P(비켜 있던 스텝) → 줄어서 씀.
+    YieldScenario s = make_yield_scenario(/*service_p=*/0);
+
+    PrioritizedPlanner off(s.map, AStarConfig{}, fixed_first_idea3_yield(false));
+    auto detour = off.replan(s.agents, s.previous_paths, s.schedule, {Cell{3, 2}}, /*current_time=*/1);
+    ASSERT_TRUE(detour.has_value());
+    EXPECT_EQ(detour->escalation_tier, 0);
+    EXPECT_EQ(detour->paths.at(0).back(), (SpaceTimeCell{6, 2, 12}));
+    EXPECT_TRUE(detour->yielded_ids.empty());
+
+    PrioritizedPlanner on(s.map, AStarConfig{}, fixed_first_idea3_yield(true));
+    auto yielded = on.replan(s.agents, s.previous_paths, s.schedule, {Cell{3, 2}}, /*current_time=*/1);
+    ASSERT_TRUE(yielded.has_value());
+    expect_conflict_free(yielded->paths);
+    EXPECT_EQ(yielded->paths.at(0).back(), (SpaceTimeCell{6, 2, 8}));
+    EXPECT_EQ(yielded->yielded_ids, std::vector<int>{1});
+    const Path& p = yielded->paths.at(1);
+    EXPECT_EQ(p.back().x, 3);  // P는 결국 자기 목적지로 돌아온다
+    EXPECT_EQ(p.back().y, 3);
+    int p_away = 0;
+    for (const SpaceTimeCell& c : p) {
+        if (c.t >= 1 && !(c.x == 3 && c.y == 3)) ++p_away;
+    }
+    EXPECT_GE(p_away, 1);
+    EXPECT_LT(7 + p_away, 11);  // 목적지 밖에 있는 시간의 합이 줄었다
+}
+
+TEST(SelectiveReplanTest, WorkingRobotYieldsOnlyIfItsTaskEndsSoon) {
+    // P가 작업 중일 때(17장 결정 4: 작업이 끝난 뒤에만 비킨다).
+    //   - t3에 작업 끝: P는 t3까지 작업하고 비킴 → W는 t4에 (3,3)을 지나 t8 도착. 비켜 달라고 한 결과를 씀.
+    //   - t20에 작업 끝: W가 기다리면 t21 이후에야 지나감 → 윗줄(t12)이 더 빠르므로 결과를 안 씀.
+    {
+        YieldScenario s = make_yield_scenario(/*service_p=*/3);
+        PrioritizedPlanner planner(s.map, AStarConfig{}, fixed_first_idea3_yield(true));
+        auto result = planner.replan(s.agents, s.previous_paths, s.schedule, {Cell{3, 2}}, 1);
+        ASSERT_TRUE(result.has_value());
+        expect_conflict_free(result->paths);
+        EXPECT_EQ(result->paths.at(0).back(), (SpaceTimeCell{6, 2, 8}));
+        EXPECT_EQ(result->yielded_ids, std::vector<int>{1});
+        for (int t = 0; t <= 3; ++t) {  // 작업 중에는 안 움직인다
+            EXPECT_EQ(result->paths.at(1)[static_cast<size_t>(t)], (SpaceTimeCell{3, 3, t}));
+        }
+        EXPECT_EQ(result->schedule.at(1), (TaskWindow{0, 3}));  // 근무표는 그대로
+    }
+    {
+        YieldScenario s = make_yield_scenario(/*service_p=*/20);
+        PrioritizedPlanner planner(s.map, AStarConfig{}, fixed_first_idea3_yield(true));
+        auto result = planner.replan(s.agents, s.previous_paths, s.schedule, {Cell{3, 2}}, 1);
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->paths.at(0).back(), (SpaceTimeCell{6, 2, 12}));
+        EXPECT_TRUE(result->yielded_ids.empty());
+        EXPECT_EQ(result->paths.at(1), s.previous_paths.at(1));  // P는 그대로 작업
+    }
+}

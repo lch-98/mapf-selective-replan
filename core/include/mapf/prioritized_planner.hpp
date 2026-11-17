@@ -71,6 +71,17 @@ struct ReplanConfig {
 
     // A*가 실패했을 때 구조 로봇을 고르는 방법(13장).
     RescueSelection rescue_selection{RescueSelection::kBlockedCells};
+
+    // true면 재계획이 성공한 뒤, 다시 계획한 로봇이 "로봇이 하나도 없을 때의 가장 빠른 도착"보다 늦게
+    // 도착하게 됐을 때, 그 로봇의 가장 짧은 길 위에 서 있는(주차 중·작업 중) 고정 로봇에게 비켜 달라고
+    // 해서 한 번 더 계획해 본다. 로봇들이 목적지 밖에 있는 시간의 합이 줄어들 때만 그 결과를 쓴다
+    // (19장, 문제 3). 고정 먼저 방식에서는 서 있는 로봇을 피하는 먼 길이라도 있으면 A*가 성공해서
+    // 비켜 달라고 할 기회가 없는데, 그걸 보완한다.
+    bool request_yield{false};
+
+    // request_yield일 때, 가장 빠른 도착보다 이 스텝 수 이상 늦어진 로봇이 있을 때만 시도한다. 한 번 더
+    // 계획하는 데 시간이 들므로, 조금 늦은 경우는 건너뛰어 시간을 아낀다. 1이면 조금이라도 늦으면 시도.
+    int yield_min_delay{1};
 };
 
 // replan() 한 번의 결과 — 최종 경로 외에, "얼마나 선택적으로 풀렸는지"를
@@ -81,6 +92,7 @@ struct ReplanResult {
     int escalation_tier{0};            // 0=Tier 0에서 끝남, 1+=그 단계까지 확장해서 성공, -1=전체 재계획 폴백
     std::vector<int> rescued_ids{};    // Tier 1+에서 새로 추가된 "구조 로봇" id 목록
     TaskSchedule schedule{};           // 재계획 후의 근무표(17장 결정 9, update_schedule로 계산)
+    std::vector<int> yielded_ids{};    // 비켜 달라고 해서 결과에 쓰인 로봇 id(19장, request_yield일 때만)
 };
 
 class PrioritizedPlanner {
@@ -193,6 +205,16 @@ private:
     // 새 장애물이 생기는 등 이미 남이 차지한 칸이 있으면 false를 돌려준다.
     bool reserve_ongoing_tasks(const std::vector<Agent>& agents, const PlanResult& previous_paths,
                                const TaskSchedule& schedule, int current_time);
+
+    // 19장(문제 3): replan이 성공한 직후 부른다. paths는 성공한 결과이고, working_ids는 그때의 재계획
+    // 로봇 명단이다. 다시 계획한 "이동 중" 로봇이 가장 빠른 도착보다 늦게 도착하게 됐으면, 그 로봇의
+    // 가장 짧은 길(쉬지 않고 가는 일정) 위에서 부딪히는 서 있는 고정 로봇을 명단 뒤에 붙여 한 번 더
+    // 계획한다. 성공했고 "로봇들이 목적지 밖에 있는 시간의 합"이 줄었으면 paths·working_ids를 바꾸고
+    // yielded_ids에 비켜 준 로봇을 담는다. 바꿨으면 true.
+    bool try_yield_requests(const std::vector<Agent>& agents, const PlanResult& previous_paths,
+                            const TaskSchedule& schedule, const std::vector<Cell>& new_obstacles,
+                            int current_time, std::vector<int>& working_ids, PlanResult& paths,
+                            std::vector<int>& yielded_ids);
 
     // 작업 중인 로봇이 자기 차례에 A*를 돌리기 직전에, 자기가 먼저 적어 둔 남은 작업 칸을 지운다.
     // 안 지우면 A*가 "목적지가 작업 끝 시각까지 예약돼 있다"고 보고(자기 예약인데도) 도착을 한

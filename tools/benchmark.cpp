@@ -72,6 +72,11 @@ struct ScenarioResult {
     int selective_replan_changed{-1};
     int selective_replanned{-1};       // 실제로 다시 탐색된 로봇 수(replanned_ids 크기)
     int selective_conflicts{-1};       // 결과 경로의 충돌 수 — 항상 0이어야 한다(검증용)
+    int selective_yielded{-1};         // 비켜 달라고 해서 결과에 쓰인 로봇 수(19장, --yield)
+    // 목적지 밖에 있는 시간의 합(19장): current_time부터 각 로봇이 자기 목적지가 아닌 칸에 있는 스텝
+    // 수의 합. 경로 비용 합과 달리, 비켜 준 로봇은 실제로 비켜 있던 스텝만 더해진다.
+    int full_replan_away{-1};
+    int selective_away{-1};
 };
 
 // 맵의 빈 칸(벽이 아닌 칸) 전부를 모은다.
@@ -126,6 +131,19 @@ int sum_of_costs(const PlanResult& paths) {
     int sum = 0;
     for (const auto& [id, path] : paths) sum += arrival_time(path);
     return sum;
+}
+
+// current_time부터 각 로봇이 자기 목적지가 아닌 칸에 있는 스텝 수의 합(19장). 아직 가는 중인 로봇은
+// 도착할 때까지, 비켜 준 로봇은 비켜 있던 스텝만 더해진다.
+int count_away(const std::vector<Agent>& agents, const PlanResult& paths, int current_time) {
+    int total = 0;
+    for (const Agent& agent : agents) {
+        const Path& path = paths.at(agent.id);
+        for (int t = current_time; t <= path.back().t; ++t) {
+            if (!(position_at(path, t) == agent.goal)) ++total;
+        }
+    }
+    return total;
 }
 
 // current_time 이후의 움직임이 before와 달라진 로봇 수. 경로 벡터를 그대로 비교하면
@@ -407,6 +425,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
         if (full.has_value()) {
             result.full_replan_soc = sum_of_costs(*full);
             result.full_replan_changed = count_changed(initial, *full, current_time);
+            result.full_replan_away = count_away(agents, *full, current_time);
         }
     }
 
@@ -423,6 +442,8 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
             result.selective_replan_changed = count_changed(initial, selective->paths, current_time);
             result.selective_replanned = static_cast<int>(selective->replanned_ids.size());
             result.selective_conflicts = count_conflicts(selective->paths);
+            result.selective_yielded = static_cast<int>(selective->yielded_ids.size());
+            result.selective_away = count_away(agents, selective->paths, current_time);
         }
     }
 
@@ -523,7 +544,7 @@ std::string run_task(const Task& task) {
         << r.selective_replan_ms << "," << r.escalation_tier << "," << r.initial_soc << ","
         << r.full_replan_soc << "," << r.full_replan_changed << "," << r.selective_replan_soc << ","
         << r.selective_replan_changed << "," << r.selective_replanned << "," << r.selective_conflicts
-        << "\n";
+        << "," << r.selective_yielded << "," << r.full_replan_away << "," << r.selective_away << "\n";
     return out.str();
 }
 
@@ -546,6 +567,9 @@ int main(int argc, char** argv) {
     // --reachability : 도달성 검사를 켠다(ReplanConfig::check_reachability, 13장).
     // --rescue R : 구조 로봇 고르는 방법(ReplanConfig::rescue_selection, 13장).
     //              blocked(기본, 막혀 본 모든 칸의 주인) | path(최단 경로와 부딪히는 로봇만).
+    // --yield    : 재계획이 성공한 뒤 늦어진 로봇이 있으면 서 있는 로봇에게 비켜 달라고 한 번 더
+    //              시도한다(ReplanConfig::request_yield, 19장).
+    // --yield-min-delay N : 가장 빠른 도착보다 N스텝 이상 늦은 로봇이 있을 때만 시도(기본 1).
     bool large = false;
     int repeats = 50;
     ReplanConfig replan_config;
@@ -569,6 +593,10 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--reachability") {
             replan_config.check_reachability = true;
+        } else if (arg == "--yield") {
+            replan_config.request_yield = true;
+        } else if (arg == "--yield-min-delay" && i + 1 < argc) {
+            replan_config.yield_min_delay = std::atoi(argv[++i]);
         } else if (arg == "--rescue" && i + 1 < argc) {
             std::string value = argv[++i];
             if (value == "blocked") {
@@ -581,7 +609,7 @@ int main(int argc, char** argv) {
             }
         } else {
             std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K] "
-                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path]\n";
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N]\n";
             return 1;
         }
     }
@@ -653,7 +681,7 @@ int main(int argc, char** argv) {
     std::cout << "map,num_agents,trial,plan_attempts,plan_ok,full_replan_ok,full_replan_ms,"
                  "selective_replan_ok,selective_replan_ms,escalation_tier,initial_soc,"
                  "full_replan_soc,full_replan_changed,selective_replan_soc,"
-                 "selective_replan_changed,selective_replanned,selective_conflicts\n";
+                 "selective_replan_changed,selective_replanned,selective_conflicts,selective_yielded,full_replan_away,selective_away\n";
     for (const std::string& line : results) std::cout << line;
 
     return 0;

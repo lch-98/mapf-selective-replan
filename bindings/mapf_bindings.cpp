@@ -143,7 +143,8 @@ PYBIND11_MODULE(mapf_py, m) {
         .def_readonly("replanned_ids", &ReplanResult::replanned_ids)
         .def_readonly("escalation_tier", &ReplanResult::escalation_tier)
         .def_readonly("rescued_ids", &ReplanResult::rescued_ids)
-        .def_readonly("schedule", &ReplanResult::schedule);
+        .def_readonly("schedule", &ReplanResult::schedule)
+        .def_readonly("yielded_ids", &ReplanResult::yielded_ids);
 
     // ── PrioritizedPlanner ─────────────────────────────────────────────────────
     // PrioritizedPlanner는 생성자 인자로 받은 const Map&를 멤버로 그대로 저장한다(복사가

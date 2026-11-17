@@ -289,6 +289,72 @@ void PrioritizedPlanner::release_ongoing_task(const Agent& agent, const Path& ol
     }
 }
 
+bool PrioritizedPlanner::try_yield_requests(const std::vector<Agent>& agents,
+                                            const PlanResult& previous_paths,
+                                            const TaskSchedule& schedule,
+                                            const std::vector<Cell>& new_obstacles,
+                                            int current_time, std::vector<int>& working_ids,
+                                            PlanResult& paths, std::vector<int>& yielded_ids) {
+    auto in_working = [&working_ids](int id) {
+        return std::find(working_ids.begin(), working_ids.end(), id) != working_ids.end();
+    };
+
+    // 1. 늦어진 로봇마다, 그 로봇의 가장 짧은 길 위에 서 있는 고정 로봇을 후보로 모은다.
+    //    table_은 방금 성공한 시도의 장부 그대로다(모든 로봇이 적혀 있음).
+    std::vector<int> candidates;
+    for (const Agent& agent : agents) {
+        if (!in_working(agent.id)) continue;
+        if (task_state_at(schedule.at(agent.id), current_time) != TaskState::kMoving) continue;
+
+        Cell here = position_at(previous_paths.at(agent.id), current_time);
+        std::vector<Cell> route = static_shortest_path(map_, here, agent.goal, new_obstacles);
+        if (route.empty()) continue;
+        int fastest_arrival = current_time + static_cast<int>(route.size()) - 1;
+        int arrival = paths.at(agent.id).back().t - agent.service_time;  // 작업 칸 앞 = 도착
+        // 이미 가장 빠르거나, 문턱(yield_min_delay)보다 덜 늦었으면 건너뛴다.
+        if (arrival - fastest_arrival < std::max(1, replan_config_.yield_min_delay)) continue;
+
+        for (const SpaceTimeCell& cell :
+             shortest_path_conflicts(here, agent.goal, new_obstacles, current_time)) {
+            std::optional<int> owner = table_.get_owner(cell.x, cell.y, cell.t);
+            if (!owner.has_value() || *owner == -1 || in_working(*owner)) continue;
+            // 움직이는 로봇은 잠깐 기다리면 지나간다. 영원히 막는 건 서 있는 로봇(Tail)뿐이다.
+            if (task_state_at(schedule.at(*owner), current_time) == TaskState::kMoving) continue;
+            if (std::find(candidates.begin(), candidates.end(), *owner) == candidates.end()) {
+                candidates.push_back(*owner);
+            }
+        }
+    }
+    if (candidates.empty()) return false;
+
+    // 2. 후보를 명단 뒤에 붙여 한 번 더 계획한다(후보는 늦어진 로봇 뒤에 계획되어 그 길을 보고 비킨다).
+    std::vector<int> extended = working_ids;
+    extended.insert(extended.end(), candidates.begin(), candidates.end());
+    std::optional<PlanResult> attempt = try_replan_set(agents, previous_paths, extended, schedule,
+                                                       new_obstacles, current_time, nullptr, nullptr);
+    if (!attempt.has_value()) return false;
+
+    // 3. 판단 기준: 지금부터 로봇들이 자기 목적지가 아닌 칸에 있는 스텝 수의 합. 경로 비용 합(도착
+    //    시각의 합)은 비켜 준 로봇의 경로가 돌아온 시각에 끝나서, 1스텝만 비켜도 크게 늘어난 것처럼
+    //    보이므로 쓰지 않는다(19장 19.2).
+    auto off_goal_steps = [&agents, current_time](const PlanResult& result) {
+        long long total = 0;
+        for (const Agent& agent : agents) {
+            const Path& path = result.at(agent.id);
+            for (int t = current_time; t <= path.back().t; ++t) {
+                if (!(position_at(path, t) == agent.goal)) ++total;
+            }
+        }
+        return total;
+    };
+    if (off_goal_steps(*attempt) >= off_goal_steps(paths)) return false;
+
+    paths = std::move(*attempt);
+    working_ids = std::move(extended);
+    yielded_ids = std::move(candidates);
+    return true;
+}
+
 std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<Agent>& agents,
                                               const PlanResult& previous_paths,
                                               const std::vector<int>& working_ids,
@@ -553,6 +619,10 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
         if (attempt.has_value()) {
             ReplanResult result;
             result.paths = *attempt;
+            if (replan_config_.request_yield) {
+                try_yield_requests(agents, previous_paths, previous_schedule, new_obstacles,
+                                   current_time, working_ids, result.paths, result.yielded_ids);
+            }
             result.replanned_ids = working_ids;
             result.escalation_tier = tier;
             result.rescued_ids = rescued_ids;
