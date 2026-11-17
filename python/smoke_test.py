@@ -74,6 +74,35 @@ def main() -> None:
     except ValueError:
         print("  ok: Map(-1,-1)이 ValueError를 던짐")
 
+    print("[8] 작업 시간(service_time)과 근무표(17장)")
+    # 5x1 통로, (0,0)->(2,0)은 t2 도착. 작업 3 -> 경로가 (2,0)t5에서 끝나고 근무표는 [2, 5].
+    corridor = mapf_py.Map(5, 1)
+    worker = [mapf_py.Agent(0, mapf_py.Cell(0, 0), mapf_py.Cell(2, 0), service_time=3)]
+    check(worker[0].service_time == 3, "Agent(service_time=3) 필드 접근")
+    check(mapf_py.Agent(1, mapf_py.Cell(0, 0), mapf_py.Cell(1, 0)).service_time == 0,
+          "service_time을 생략하면 0")
+    planner_w = mapf_py.PrioritizedPlanner(corridor)
+    planned = planner_w.plan(worker)
+    check(planned is not None and planned[0][-1] == mapf_py.SpaceTimeCell(2, 0, 5),
+          "plan() 경로 끝에 작업 칸이 붙어 (2,0)t5에서 끝남")
+    schedule = mapf_py.schedule_from_plan(worker, planned)
+    check(isinstance(schedule, dict) and schedule[0] == mapf_py.TaskWindow(2, 5),
+          "schedule_from_plan -> dict[int, TaskWindow], 근무표 [2, 5]")
+    check(mapf_py.task_state_at(schedule[0], 3) == mapf_py.TaskState.WORKING, "t3에는 작업 중")
+    check(mapf_py.task_state_at(schedule[0], 5) == mapf_py.TaskState.PARKED, "t5부터 주차 중")
+
+    again = planner_w.replan(worker, planned, schedule, [], 3)
+    check(again is not None and again.schedule[0] == mapf_py.TaskWindow(2, 5),
+          "근무표를 받는 replan() + 결과의 schedule")
+    full_again = planner_w.full_replan(worker, planned, schedule, [], 3)
+    check(full_again is not None and full_again[0] == planned[0],
+          "근무표를 받는 full_replan(): 작업 중인 로봇은 그대로")
+    try:
+        planner_w.replan(worker, planned, [], 3)
+        raise AssertionError("FAILED: 작업 시간이 있는데 예전 replan()이 예외를 안 던짐")
+    except ValueError:
+        print("  ok: 작업 시간이 있으면 근무표 없는 예전 replan()은 ValueError")
+
     print("\nSMOKE TEST PASSED")
 
 

@@ -55,8 +55,13 @@ class Agent:
     id: int
     start: Cell
     goal: Cell
+    service_time: int
+    """목적지에 도착한 뒤 작업하는 스텝 수(17장). 작업 중에는 절대 움직이지 않고, 작업이
+    끝나면 주차 상태라 구조 로봇으로 불리면 비켜 줄 수 있다. 0이면 "도착 = 작업 완료"(예전과 같음)."""
 
-    def __init__(self, id: int = 0, start: Cell = ..., goal: Cell = ...) -> None: ...
+    def __init__(
+        self, id: int = 0, start: Cell = ..., goal: Cell = ..., service_time: int = 0
+    ) -> None: ...
     def __repr__(self) -> str: ...
 
 class Map:
@@ -99,6 +104,53 @@ class ReplanConfig:
 
     def __init__(self) -> None: ...
 
+class TaskWindow:
+    """로봇 한 대의 작업 구간(17장 결정 3). [start, end) 동안 작업하고, end 시각부터 움직일 수 있다.
+    예: t2에 도착, 작업 3 -> TaskWindow(start=2, end=5). 작업 시간이 0이면 start == end."""
+
+    start: int
+    """작업 시작 = 목적지 도착 시각."""
+    end: int
+    """작업 끝 = 이 시각부터 움직일 수 있다(start + service_time)."""
+
+    def __init__(self, start: int = 0, end: int = 0) -> None: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __repr__(self) -> str: ...
+
+# 로봇 id -> 작업 구간. 근무표. PlanResult처럼 순수 파이썬 dict다.
+TaskSchedule = Dict[int, TaskWindow]
+
+class TaskState:
+    """어떤 시각에 로봇이 어떤 상태인지(17장 17.3절)."""
+
+    MOVING: "TaskState"   # t < start: 아직 도착 전
+    WORKING: "TaskState"  # start <= t < end: 작업 중, 절대 안 움직임
+    PARKED: "TaskState"   # end <= t: 작업 끝, 주차 중, 불리면 비켜 줄 수 있음
+
+def task_state_at(window: TaskWindow, t: int) -> TaskState:
+    """시각 t에 이 작업 구간의 로봇이 이동 중 / 작업 중 / 주차 중 중 무엇인지."""
+    ...
+
+def window_from_path(agent: Agent, path: Path) -> TaskWindow:
+    """새로 계획한 경로에서 작업 구간을 읽는다(end = 경로 끝, start = end - service_time).
+    처음 계획 결과에만 쓴다. 경로 끝의 (service_time + 1)칸이 목적지가 아니면 ValueError."""
+    ...
+
+def schedule_from_plan(agents: List[Agent], paths: PlanResult) -> TaskSchedule:
+    """처음 계획(plan)의 결과에서 근무표를 만든다."""
+    ...
+
+def update_schedule(
+    agents: List[Agent],
+    previous: TaskSchedule,
+    new_paths: PlanResult,
+    current_time: int,
+) -> TaskSchedule:
+    """재계획 후의 근무표. current_time에 아직 이동 중이던 로봇만 새 경로로 다시 계산하고,
+    이미 도착한(작업 중, 주차 중) 로봇은 그대로 둔다. full_replan 결과에 쓴다
+    (replan은 결과의 schedule에 이미 담아 준다)."""
+    ...
+
 class ReplanResult:
     """PrioritizedPlanner.replan() 한 번의 결과. 최종 경로 외에 "얼마나 선택적으로
     풀렸는지"를 보여주는 디버깅·연구용 정보를 함께 담는다."""
@@ -116,6 +168,9 @@ class ReplanResult:
     rescued_ids: List[int]
     """Tier 1+에서 새로 추가된 "구조 로봇" id 목록. 비어있으면 Tier 0만으로
     충분했다는 뜻."""
+
+    schedule: TaskSchedule
+    """재계획 후의 근무표. 다음 replan()에 previous_schedule로 그대로 넘긴다."""
 
 class PrioritizedPlanner:
     """고정 우선순위 계획(Prioritized Planning, PP). 우선순위는 agents 리스트의 순서
@@ -135,10 +190,25 @@ class PrioritizedPlanner:
 
     def plan(self, agents: List[Agent]) -> Optional[PlanResult]:
         """agents를 순서대로(=우선순위 순으로) 전부 계획한다. 한 로봇이라도
-        경로를 못 찾으면 None을 반환한다. agents에 중복 id가 있으면
-        ValueError. agents가 빈 리스트면 빈 dict를 성공으로 반환한다."""
+        경로를 못 찾으면 None을 반환한다. agents에 중복 id가 있거나 service_time이
+        음수면 ValueError. agents가 빈 리스트면 빈 dict를 성공으로 반환한다.
+        각 경로는 도착 후 작업 칸(service_time개)까지 포함해서 끝난다. 근무표는
+        schedule_from_plan(agents, 결과)로 만든다."""
         ...
 
+    @overload
+    def replan(
+        self,
+        agents: List[Agent],
+        previous_paths: PlanResult,
+        previous_schedule: TaskSchedule,
+        new_obstacles: List[Cell],
+        current_time: int,
+    ) -> Optional[ReplanResult]:
+        """근무표를 받는 버전(17장). 지금 작업 중인 로봇은 작업이 끝날 때까지 절대 움직이지
+        않는다(구조 로봇으로 불려도 작업이 끝난 뒤에 비킨다). 결과의 schedule에 새 근무표가 담긴다."""
+        ...
+    @overload
     def replan(
         self,
         agents: List[Agent],
@@ -150,9 +220,23 @@ class PrioritizedPlanner:
         생겼을 때, 영향받은 로봇만 선택적으로 다시 계획한다. Tier 0(영향받은
         로봇만) -> Tier 1..max_escalation_tiers(막은 원인 로봇을 추적해서
         확장) -> 안전망(전체 재계획)을 순서대로 시도한다. 안전망까지도
-        실패하면 None."""
+        실패하면 None. 근무표 없이 부르는 예전 버전이라, service_time이 있는 로봇이
+        하나라도 있으면 ValueError(근무표를 받는 버전을 써야 한다)."""
         ...
 
+    @overload
+    def full_replan(
+        self,
+        agents: List[Agent],
+        previous_paths: PlanResult,
+        previous_schedule: TaskSchedule,
+        new_obstacles: List[Cell],
+        current_time: int,
+    ) -> Optional[PlanResult]:
+        """근무표를 받는 버전(17장). 작업 중인 로봇은 여기서도 작업이 끝날 때까지 안 움직인다.
+        새 근무표는 update_schedule(agents, previous_schedule, 결과, current_time)로 만든다."""
+        ...
+    @overload
     def full_replan(
         self,
         agents: List[Agent],
@@ -163,7 +247,8 @@ class PrioritizedPlanner:
         """"현재 위치 기준 전체 재계획" — replan()이 안전망으로 쓰는 것과
         동일한 로직. working_ids 구분 없이 agents 전체를, current_time
         시점 위치를 새 출발점으로 삼아 처음부터 다시 계획한다(이미 지나온
-        길은 보존). 선택적 재계획과 공정하게 비교할 "베이스라인"으로 쓴다."""
+        길은 보존). 선택적 재계획과 공정하게 비교할 "베이스라인"으로 쓴다.
+        예전 버전이라 service_time이 있는 로봇이 있으면 ValueError."""
         ...
 
     @staticmethod

@@ -23,6 +23,7 @@
 #include "mapf/map.hpp"
 #include "mapf/prioritized_planner.hpp"
 #include "mapf/space_time_astar.hpp"
+#include "mapf/task_schedule.hpp"
 
 namespace py = pybind11;
 using namespace mapf;
@@ -64,20 +65,24 @@ PYBIND11_MODULE(mapf_py, m) {
         });
 
     // ── Agent ───────────────────────────────────────────────────
-    // Agent(id, start, goal) 생성자를 바인딩해서, tools/benchmark.cpp의
+    // Agent(id, start, goal, service_time=0) 생성자를 바인딩해서, tools/benchmark.cpp의
     // Agent{i, shuffled_starts[i], shuffled_goals[i]} 패턴을 파이썬에서
     // 그대로 재현할 수 있게 한다. 우선순위는 이 객체들을 담은 리스트의
     // 순서로 정해진다(앞에 올수록 우선순위 높음) — 필드로 따로 없음.
+    // service_time은 목적지에 도착한 뒤 작업하는 스텝 수다(17장). 생략하면 0이라 예전과 같다.
     py::class_<Agent>(m, "Agent")
         .def(py::init<>())
-        .def(py::init<int, Cell, Cell>(), py::arg("id"), py::arg("start"), py::arg("goal"))
+        .def(py::init<int, Cell, Cell, int>(), py::arg("id"), py::arg("start"), py::arg("goal"),
+             py::arg("service_time") = 0)
         .def_readwrite("id", &Agent::id)
         .def_readwrite("start", &Agent::start)
         .def_readwrite("goal", &Agent::goal)
+        .def_readwrite("service_time", &Agent::service_time)
         .def("__repr__", [](const Agent& a) {
             return "Agent(id=" + std::to_string(a.id) + ", start=Cell(" +
                    std::to_string(a.start.x) + "," + std::to_string(a.start.y) + "), goal=Cell(" +
-                   std::to_string(a.goal.x) + "," + std::to_string(a.goal.y) + "))";
+                   std::to_string(a.goal.x) + "," + std::to_string(a.goal.y) +
+                   "), service_time=" + std::to_string(a.service_time) + ")";
         });
 
     // ── Map ─────────────────────────────────────────────────────
@@ -104,6 +109,32 @@ PYBIND11_MODULE(mapf_py, m) {
         .def(py::init<>())
         .def_readwrite("max_escalation_tiers", &ReplanConfig::max_escalation_tiers);
 
+    // ── 근무표 (TaskWindow, TaskState, 근무표 함수) ───────────────
+    // 17장 결정 3·9. TaskSchedule(= std::unordered_map<int, TaskWindow>)은 PlanResult처럼
+    // 따로 바인딩하지 않는다 — TaskWindow만 등록되면 dict[int, TaskWindow]로 자동 변환된다.
+    py::class_<TaskWindow>(m, "TaskWindow")
+        .def(py::init<>())
+        .def(py::init([](int start, int end) { return TaskWindow{start, end}; }),
+             py::arg("start"), py::arg("end"))
+        .def_readwrite("start", &TaskWindow::start)
+        .def_readwrite("end", &TaskWindow::end)
+        .def(py::self == py::self)
+        .def("__repr__", [](const TaskWindow& w) {
+            return "TaskWindow(start=" + std::to_string(w.start) + ", end=" +
+                   std::to_string(w.end) + ")";
+        });
+
+    py::enum_<TaskState>(m, "TaskState")
+        .value("MOVING", TaskState::kMoving)
+        .value("WORKING", TaskState::kWorking)
+        .value("PARKED", TaskState::kParked);
+
+    m.def("task_state_at", &task_state_at, py::arg("window"), py::arg("t"));
+    m.def("window_from_path", &window_from_path, py::arg("agent"), py::arg("path"));
+    m.def("schedule_from_plan", &schedule_from_plan, py::arg("agents"), py::arg("paths"));
+    m.def("update_schedule", &update_schedule, py::arg("agents"), py::arg("previous"),
+          py::arg("new_paths"), py::arg("current_time"));
+
     // ── ReplanResult ────────────────────────────────────────────
     // paths는 PlanResult(= std::unordered_map<int, Path>) 그대로 반환된다 —
     // 파이썬에서는 dict[int, list[SpaceTimeCell]]로 자연스럽게 보인다.
@@ -111,7 +142,8 @@ PYBIND11_MODULE(mapf_py, m) {
         .def_readonly("paths", &ReplanResult::paths)
         .def_readonly("replanned_ids", &ReplanResult::replanned_ids)
         .def_readonly("escalation_tier", &ReplanResult::escalation_tier)
-        .def_readonly("rescued_ids", &ReplanResult::rescued_ids);
+        .def_readonly("rescued_ids", &ReplanResult::rescued_ids)
+        .def_readonly("schedule", &ReplanResult::schedule);
 
     // ── PrioritizedPlanner ─────────────────────────────────────────────────────
     // PrioritizedPlanner는 생성자 인자로 받은 const Map&를 멤버로 그대로 저장한다(복사가
@@ -134,6 +166,18 @@ PYBIND11_MODULE(mapf_py, m) {
              py::overload_cast<const std::vector<Agent>&, const PlanResult&,
                                const std::vector<Cell>&, int>(&PrioritizedPlanner::full_replan),
              py::arg("agents"), py::arg("previous_paths"),
+             py::arg("new_obstacles"), py::arg("current_time"))
+        // 근무표를 받는 새 버전(17장). 같은 이름의 예전 버전(근무표 없음)과 인자 개수가 달라서
+        // pybind11이 호출할 때 인자를 보고 알맞은 쪽을 고른다.
+        .def("replan",
+             py::overload_cast<const std::vector<Agent>&, const PlanResult&, const TaskSchedule&,
+                               const std::vector<Cell>&, int>(&PrioritizedPlanner::replan),
+             py::arg("agents"), py::arg("previous_paths"), py::arg("previous_schedule"),
+             py::arg("new_obstacles"), py::arg("current_time"))
+        .def("full_replan",
+             py::overload_cast<const std::vector<Agent>&, const PlanResult&, const TaskSchedule&,
+                               const std::vector<Cell>&, int>(&PrioritizedPlanner::full_replan),
+             py::arg("agents"), py::arg("previous_paths"), py::arg("previous_schedule"),
              py::arg("new_obstacles"), py::arg("current_time"))
         .def_static("path_hits_obstacle", &PrioritizedPlanner::path_hits_obstacle, py::arg("path"),
                     py::arg("new_obstacles"), py::arg("current_time"));
