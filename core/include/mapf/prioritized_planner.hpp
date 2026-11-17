@@ -21,6 +21,7 @@
 #include "mapf/map.hpp"
 #include "mapf/reservation_table.hpp"
 #include "mapf/space_time_astar.hpp"
+#include "mapf/task_schedule.hpp"
 
 namespace mapf {
 
@@ -92,6 +93,10 @@ public:
     // 한쪽 경로가 덮어써져 사라지는 잘못된 결과가 조용히 나온다.
     // agents가 빈 벡터이면 계획할 로봇이 없으므로 빈 PlanResult를 성공으로
     // 반환한다(실패가 아니다).
+    //
+    // 작업 시간(Agent::service_time, 17장): 각 경로는 도착 후 작업 칸까지 포함해서 끝난다.
+    // 작업이 max_timestep 안에 안 끝나는 로봇이 있으면 실패한다. service_time이 음수면
+    // std::invalid_argument를 던진다. 근무표는 schedule_from_plan(agents, 결과)로 만든다.
     std::optional<PlanResult> plan(const std::vector<Agent>& agents);
 
     // 이미 진행 중인 계획(previous_paths)에 new_obstacles가 새로 생겼을 때,

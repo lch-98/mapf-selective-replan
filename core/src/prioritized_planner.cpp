@@ -141,6 +141,9 @@ std::optional<PlanResult> PrioritizedPlanner::plan(const std::vector<Agent>& age
         if (!seen_ids.insert(agent.id).second) {
             throw std::invalid_argument("PrioritizedPlanner::plan: agents must not contain duplicate ids");
         }
+        if (agent.service_time < 0) {
+            throw std::invalid_argument("PrioritizedPlanner::plan: service_time must not be negative");
+        }
     }
 
     table_.clear();
@@ -148,8 +151,12 @@ std::optional<PlanResult> PrioritizedPlanner::plan(const std::vector<Agent>& age
     PlanResult result;
 
     for (const Agent& agent : agents) {
+        // 작업 시간을 넘기면 A*가 "도착 후 작업이 시간 한도 안에 끝나는지"까지 보고, 경로 끝에 작업
+        // 칸을 붙여 준다(17장 결정 7). 작업 구간은 Tail Reservation(도착부터 max_timestep까지
+        // 목적지 예약)에 이미 들어 있으므로, 다른 로봇이 작업 중인 목적지를 지나갈 일은 원래부터 없다.
         SpaceTimeAStar astar(map_, table_, config_);
-        std::optional<Path> path = astar.search(agent.start, agent.goal);
+        std::optional<Path> path =
+            astar.search(agent.start, agent.goal, /*start_time=*/0, agent.service_time);
 
         if (!path.has_value()) {
             return std::nullopt;

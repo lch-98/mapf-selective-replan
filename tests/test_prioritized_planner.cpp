@@ -820,3 +820,59 @@ TEST(SelectiveReplanTest, ShortestPathRescueCallsOnlyAgentsOnTheRoute) {
     EXPECT_EQ(precise->paths.at(2), previous_paths.at(2));  // Z는 그대로
     expect_conflict_free(precise->paths);
 }
+
+// ───────────────────────────────────────────────────────────────
+// 17장 — 작업 시간(service_time): plan
+// ───────────────────────────────────────────────────────────────
+
+TEST(PrioritizedPlannerTest, PlanAppendsServiceCellsAndScheduleFollowsThem) {
+    // LowerPriorityAgentWaitsInsteadOfArrivingBeforeHigherPriorityPassesGoal과 같은 지도에
+    // 작업 시간만 붙였다.
+    //   y=0:  . . . . .
+    //   y=1:  # # . # #
+    // 로봇0(1순위): (0,0)->(4,0), 작업 1. t2에 (2,0)을 지나 t4에 도착, t4~t5 작업 → 경로는 t5에서 끝.
+    // 로봇1(2순위): (2,1)->(2,0), 작업 2. 로봇0이 t2에 (2,0)을 지나가므로 t3에 도착하고,
+    //   t3~t5 작업 → 경로는 t5에서 끝.
+    // 작업 구간은 Tail(도착부터 끝까지 목적지 예약)에 이미 들어 있어서, 누구도 작업 중인
+    // 목적지를 지나가지 않는다 — expect_conflict_free로 확인한다.
+    Map map(std::vector<std::string>{
+        ".....",
+        "##.##",
+    });
+    PrioritizedPlanner planner(map);
+
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 0}, Cell{4, 0}, /*service_time=*/1},
+        Agent{1, Cell{2, 1}, Cell{2, 0}, /*service_time=*/2},
+    };
+
+    auto result = planner.plan(agents);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->at(0).back(), (SpaceTimeCell{4, 0, 5}));
+    EXPECT_EQ(result->at(1).back(), (SpaceTimeCell{2, 0, 5}));
+    expect_conflict_free(*result);
+
+    TaskSchedule schedule = schedule_from_plan(agents, *result);
+    EXPECT_EQ(schedule.at(0), (TaskWindow{4, 5}));
+    EXPECT_EQ(schedule.at(1), (TaskWindow{3, 5}));
+}
+
+TEST(PrioritizedPlannerTest, PlanFailsWhenServiceCannotFinishWithinHorizon) {
+    // (0,0)->(2,0)은 t2에 도착한다. max_timestep=4.
+    //   작업 2: t4에 끝남 → 성공.  작업 3: t5에 끝나야 해서 한도를 넘음 → 실패.
+    Map map(3, 1);
+    AStarConfig config;
+    config.max_timestep = 4;
+    PrioritizedPlanner planner(map, config);
+
+    EXPECT_TRUE(planner.plan({Agent{0, Cell{0, 0}, Cell{2, 0}, /*service_time=*/2}}).has_value());
+    EXPECT_FALSE(planner.plan({Agent{0, Cell{0, 0}, Cell{2, 0}, /*service_time=*/3}}).has_value());
+}
+
+TEST(PrioritizedPlannerTest, PlanRejectsNegativeServiceTime) {
+    Map map(3, 1);
+    PrioritizedPlanner planner(map);
+    EXPECT_THROW(planner.plan({Agent{0, Cell{0, 0}, Cell{2, 0}, /*service_time=*/-1}}),
+                 std::invalid_argument);
+}
