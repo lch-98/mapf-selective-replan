@@ -40,7 +40,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--map", choices=list(MAP_FACTORIES.keys()), default="corridor")
     parser.add_argument("--agents", type=int, default=30)
     parser.add_argument("--seed", type=int, default=None)
-    return parser.parse_args()
+    # 21장 5-4: 작업 시간 분포 U[LO, HI](벤치마크 --service와 같음)와 오른쪽 패널의 방법.
+    parser.add_argument("--service", type=int, nargs=2, metavar=("LO", "HI"), default=[0, 0],
+                        help="로봇마다 작업 시간을 LO~HI 정수로(기본 0 0 = 작업 없음)")
+    parser.add_argument("--method", choices=["ours", "legacy"], default="ours",
+                        help="오른쪽 패널: ours=우리 방법(고정 먼저+도달 확인+경로 구조), legacy=원래 방식")
+    args = parser.parse_args()
+    lo, hi = args.service
+    if lo < 0 or hi < lo:
+        parser.error("--service는 0 <= LO <= HI 여야 합니다")
+    return args
+
+
+def make_replan_config(method: str) -> "mapf_py.ReplanConfig":
+    """오른쪽 패널의 재계획 설정. ours는 벤치마크의 우리 방법
+    (--order fixed-first --reachability --rescue path)과 같다. legacy는 기본값(원래 방식)."""
+    config = mapf_py.ReplanConfig()
+    if method == "ours":
+        config.order = mapf_py.ReplanOrder.FIXED_FIRST
+        config.check_reachability = True
+        config.rescue_selection = mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+    return config
 
 
 def _cell_at(path: list, t: int) -> tuple:
@@ -59,6 +79,9 @@ class ReplanSideResult:
         self.ok: bool = True
         self.escalation_tier = None  # full_replan 쪽은 항상 None(N/A)
         self.note: str = ""
+        # 이 패널의 근무표(17장). 재계획마다 dict를 통째로 새로 바꿔 끼운다(제자리 수정 없음 →
+        # step_back의 얕은 복사로 충분).
+        self.schedule: dict = {}
 
 
 class App:
@@ -66,6 +89,11 @@ class App:
         self.rng = random.Random(args.seed)
         self.game_map = MAP_FACTORIES[args.map]()
         self.num_agents = args.agents
+        self.service_range = tuple(args.service)
+        # 작업 시간 전용 난수. --seed가 같으면 작업 시간을 켜든 끄든 로봇 배치가 같다.
+        self.service_rng = random.Random(None if args.seed is None else f"service-{args.seed}")
+        self.method = args.method
+        self.replan_config = make_replan_config(args.method)
 
         self.layout = render.PanelLayout(self.game_map.width(), self.game_map.height())
         pygame.init()
@@ -76,6 +104,7 @@ class App:
         # 표시됨) — 맑은 고딕(malgungothic, Windows 기본 한글 폰트)으로 교체.
         self.font = pygame.font.SysFont("malgungothic", 15)
         self.header_font = pygame.font.SysFont("malgungothic", 18, bold=True)
+        self.badge_font = pygame.font.SysFont("malgungothic", 11, bold=True)
         self.pygame_clock = pygame.time.Clock()
 
         self.message = ""
@@ -94,8 +123,10 @@ class App:
         배치가 나온다(완전한 무작위 재시작).
         """
         self.agents, self.initial_paths = find_solvable_scenario(
-            self.game_map, self.num_agents, self.rng
+            self.game_map, self.num_agents, self.rng,
+            service_range=self.service_range, service_rng=self.service_rng,
         )
+        self.initial_schedule = mapf_py.schedule_from_plan(self.agents, self.initial_paths)
         self.colors = render.agent_colors(self.num_agents)
 
         self.clock_sim = SimClock()
@@ -105,8 +136,10 @@ class App:
         # 상태에서는 두 패널 다 초기 경로를 그대로 보여준다.
         self.full_side = ReplanSideResult()
         self.full_side.paths = self.initial_paths
+        self.full_side.schedule = self.initial_schedule
         self.selective_side = ReplanSideResult()
         self.selective_side.paths = self.initial_paths
+        self.selective_side.schedule = self.initial_schedule
 
         # 한 스텝 되돌리기(←)용: SPACE를 누를 때마다 그 직전 상태를 쌓아 둔다.
         self.history: list = []
@@ -124,13 +157,29 @@ class App:
                 positions.append(self.clock_sim.position_at(side.paths[agent.id]))
         return positions
 
-    def waiting_agent_ids(self, paths: dict) -> set:
+    def working_remaining(self, schedule: dict) -> dict:
+        """지금 작업 중인 로봇 id -> 남은 작업 스텝 수(작업 끝 시각 - 지금). 17장: 작업 중인
+        로봇은 작업이 끝날 때까지 절대 안 움직인다. 작업 시간 0이면 항상 빈 dict."""
+        t = self.clock_sim.current_time
+        remaining = {}
+        for agent in self.agents:
+            window = schedule[agent.id]
+            if mapf_py.task_state_at(window, t) == mapf_py.TaskState.WORKING:
+                remaining[agent.id] = window.end - t
+        return remaining
+
+    def waiting_agent_ids(self, paths: dict, schedule: dict) -> set:
         """이번 스텝(t -> t+1)에 제자리에 머물다가 나중에 다시 움직일 로봇 id —
         즉 누군가에게 길을 양보하며 기다리는 로봇. 목적지에 도착해서 계속 머무는
-        로봇(그 뒤로 더 안 움직임)과, 재계획 실패로 멈춰 선 로봇은 제외된다."""
+        로봇(그 뒤로 더 안 움직임)과, 재계획 실패로 멈춰 선 로봇은 제외된다.
+        작업 중인 로봇도 제외한다 — 작업이 끝난 뒤 구조되어 비키는 로봇은 "나중에 다시
+        움직이지만" 양보하며 기다리는 게 아니라 작업하는 중이다(21장 21.1의 4번)."""
         t = self.clock_sim.current_time
+        working = self.working_remaining(schedule)
         waiting = set()
         for agent in self.agents:
+            if agent.id in working:
+                continue
             path = paths[agent.id]
             here = _cell_at(path, t)
             if _cell_at(path, t + 1) != here:
@@ -256,8 +305,15 @@ class App:
 
         planner_full = mapf_py.PrioritizedPlanner(self.game_map)
         t0 = time.perf_counter()
-        full_result = planner_full.full_replan(self.agents, prev_full, self.obstacles, current_time)
+        full_result = planner_full.full_replan(
+            self.agents, prev_full, self.full_side.schedule, self.obstacles, current_time
+        )
         full_elapsed = (time.perf_counter() - t0) * 1000.0
+        if full_result is not None:
+            # full_replan은 경로만 돌려주므로 근무표는 update_schedule로 만든다(17장 결정 9).
+            self.full_side.schedule = mapf_py.update_schedule(
+                self.agents, self.full_side.schedule, full_result, current_time
+            )
 
         self.full_side.ok = full_result is not None
         self.full_side.elapsed_ms = full_elapsed
@@ -267,15 +323,18 @@ class App:
         )
         self.full_side.note = "" if full_result is not None else "(재계획 실패 — 로봇이 현재 위치에 멈춘 상태로 표시됨)"
 
-        planner_sel = mapf_py.PrioritizedPlanner(self.game_map)
+        planner_sel = mapf_py.PrioritizedPlanner(self.game_map, replan_config=self.replan_config)
         t0 = time.perf_counter()
-        sel_result = planner_sel.replan(self.agents, prev_sel, self.obstacles, current_time)
+        sel_result = planner_sel.replan(
+            self.agents, prev_sel, self.selective_side.schedule, self.obstacles, current_time
+        )
         sel_elapsed = (time.perf_counter() - t0) * 1000.0
 
         self.selective_side.ok = sel_result is not None
         self.selective_side.elapsed_ms = sel_elapsed
         if sel_result is not None:
             self.selective_side.paths = sel_result.paths
+            self.selective_side.schedule = sel_result.schedule
             self.selective_side.escalation_tier = sel_result.escalation_tier
             self.selective_side.note = ""
         else:
@@ -304,22 +363,30 @@ class App:
         self.screen.fill(render.BG_COLOR)
 
         render.draw_header(self.screen, self.layout, 0, self.header_font, "Full Replan")
-        render.draw_header(self.screen, self.layout, 1, self.header_font, "Selective Replan")
+        method_name = "우리 방법" if self.method == "ours" else "원래 방식"
+        render.draw_header(self.screen, self.layout, 1, self.header_font,
+                           f"Selective Replan ({method_name})")
 
         waiting_counts = []
+        working_counts = []
         for panel_index, side in ((0, self.full_side), (1, self.selective_side)):
             render.draw_grid(self.screen, self.layout, panel_index, self.game_map)
             for agent in self.agents:
                 path = side.paths.get(agent.id, self.initial_paths[agent.id])
                 render.draw_path(self.screen, self.layout, panel_index, path, self.colors[agent.id])
-            waiting = self.waiting_agent_ids(side.paths)
+            waiting = self.waiting_agent_ids(side.paths, side.schedule)
             waiting_counts.append(len(waiting))
+            working = self.working_remaining(side.schedule)
+            working_counts.append(len(working))
             for agent in self.agents:
                 path = side.paths.get(agent.id, self.initial_paths[agent.id])
                 cell = self.clock_sim.position_at(path)
                 render.draw_robot(self.screen, self.layout, panel_index, cell, self.colors[agent.id])
                 if self.show_waiting and agent.id in waiting:
                     render.draw_wait_marker(self.screen, self.layout, panel_index, cell)
+                if agent.id in working:
+                    render.draw_work_badge(self.screen, self.layout, panel_index, cell,
+                                           working[agent.id], self.badge_font)
             render.draw_obstacles(self.screen, self.layout, panel_index, self.obstacles)
             render.draw_stats(
                 self.screen,
@@ -342,8 +409,12 @@ class App:
             f"대기(양보) 중: 왼쪽 {waiting_counts[0]}대 / 오른쪽 {waiting_counts[1]}대"
             if self.show_waiting else "대기 표시 꺼짐"
         )
+        work_text = (
+            f"작업 중: 왼쪽 {working_counts[0]}대 / 오른쪽 {working_counts[1]}대   "
+            if self.service_range[1] > 0 else ""
+        )
         clock_text = self.font.render(
-            f"t = {self.clock_sim.current_time}   {wait_text}   "
+            f"t = {self.clock_sim.current_time}   {work_text}{wait_text}   "
             f"(SPACE: 다음 스텝, ←: 이전 스텝, W: 대기 표시, 클릭: 장애물, R: 재시작, ESC: 종료)",
             True,
             render.TEXT_COLOR,

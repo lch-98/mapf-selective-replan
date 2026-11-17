@@ -103,6 +103,95 @@ def main() -> None:
     except ValueError:
         print("  ok: 작업 시간이 있으면 근무표 없는 예전 replan()은 ValueError")
 
+    print("[9] ReplanConfig 스위치(21장 5-1): 값이 저장되고, 실제로 C++까지 전달되는지")
+    cfg = mapf_py.ReplanConfig()
+    check(cfg.order == mapf_py.ReplanOrder.PRIORITY and not cfg.check_reachability
+          and cfg.rescue_selection == mapf_py.RescueSelection.BLOCKED_CELLS
+          and not cfg.request_yield and cfg.yield_min_delay == 1,
+          "기본값 = 원래 방식(PRIORITY, 도달 확인 끔, BLOCKED_CELLS, 양보 끔, 문턱 1)")
+    cfg.order = mapf_py.ReplanOrder.FIXED_FIRST
+    cfg.check_reachability = True
+    cfg.rescue_selection = mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+    cfg.request_yield = True
+    cfg.yield_min_delay = 7
+    check(cfg.order == mapf_py.ReplanOrder.FIXED_FIRST and cfg.check_reachability
+          and cfg.rescue_selection == mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+          and cfg.request_yield and cfg.yield_min_delay == 7, "다섯 값을 쓰고 다시 읽으면 같음")
+
+    def C(x, y):
+        return mapf_py.Cell(x, y)
+
+    def ST(x, y, t):
+        return mapf_py.SpaceTimeCell(x, y, t)
+
+    # (a) order — C++ FixedFirstKeepsUnchangedAgentAndDetoursWorkingAgentAtTier0과 같은 장면.
+    #     우선순위 순이면 K(1번)를 비키게 해서 Tier 1, 고정 먼저면 R(0번)이 K를 피해 Tier 0에서 t6 도착.
+    grid43 = mapf_py.Map(4, 3)
+    rk = [mapf_py.Agent(0, C(0, 0), C(3, 0)), mapf_py.Agent(1, C(1, 2), C(1, 2))]
+    rk_prev = {0: [ST(0, 0, 0), ST(1, 0, 1), ST(2, 0, 2), ST(3, 0, 3)],
+               1: [ST(1, 2, 0), ST(1, 2, 1), ST(1, 1, 2), ST(1, 2, 3)]}
+    rk_sched = mapf_py.schedule_from_plan(rk, rk_prev)
+    by_priority = mapf_py.PrioritizedPlanner(grid43).replan(rk, rk_prev, rk_sched, [C(1, 0), C(2, 0)], 0)
+    ff_cfg = mapf_py.ReplanConfig()
+    ff_cfg.order = mapf_py.ReplanOrder.FIXED_FIRST
+    by_fixed = mapf_py.PrioritizedPlanner(grid43, replan_config=ff_cfg).replan(
+        rk, rk_prev, rk_sched, [C(1, 0), C(2, 0)], 0)
+    check(by_priority is not None and by_priority.escalation_tier == 1, "PRIORITY: Tier 1(K를 구조)")
+    check(by_fixed is not None and by_fixed.escalation_tier == 0
+          and by_fixed.paths[0][-1] == ST(3, 0, 6) and by_fixed.paths[1] == rk_prev[1],
+          "FIXED_FIRST: Tier 0, R은 t6 도착, K는 그대로")
+
+    # (b) rescue_selection — C++ ShortestPathRescueCallsOnlyAgentsOnTheRoute와 같은 장면.
+    route_map = mapf_py.Map(["####.###", ".##...##", "........"])
+    kwz = [mapf_py.Agent(0, C(4, 1), C(4, 1)), mapf_py.Agent(1, C(0, 2), C(6, 2)),
+           mapf_py.Agent(2, C(0, 1), C(0, 1))]
+    kwz_prev = {0: [ST(4, 1, 0)], 1: [ST(x, 2, x) for x in range(7)], 2: [ST(0, 1, 0)]}
+    kwz_sched = mapf_py.schedule_from_plan(kwz, kwz_prev)
+    coarse = mapf_py.PrioritizedPlanner(route_map, replan_config=ff_cfg).replan(
+        kwz, kwz_prev, kwz_sched, [C(4, 2)], 3)
+    precise_cfg = mapf_py.ReplanConfig()
+    precise_cfg.order = mapf_py.ReplanOrder.FIXED_FIRST
+    precise_cfg.rescue_selection = mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+    precise = mapf_py.PrioritizedPlanner(route_map, replan_config=precise_cfg).replan(
+        kwz, kwz_prev, kwz_sched, [C(4, 2)], 3)
+    check(coarse is not None and 2 in coarse.rescued_ids, "BLOCKED_CELLS: 상관없는 Z(2번)까지 구조")
+    check(precise is not None and list(precise.rescued_ids) == [0], "SHORTEST_PATH_CONFLICTS: K(0번)만 구조")
+
+    # (c) check_reachability — 5x1 통로를 장애물이 끊으면 둘 다 실패(결과가 같아야 정상).
+    line = mapf_py.Map(5, 1)
+    one = [mapf_py.Agent(0, C(0, 0), C(4, 0))]
+    one_plan = mapf_py.PrioritizedPlanner(line).plan(one)
+    reach_cfg = mapf_py.ReplanConfig()
+    reach_cfg.check_reachability = True
+    check(mapf_py.PrioritizedPlanner(line, replan_config=reach_cfg).replan(
+        one, one_plan, mapf_py.schedule_from_plan(one, one_plan), [C(2, 0)], 0) is None,
+        "check_reachability: 길이 끊기면 바로 실패(None)")
+
+    # (d) request_yield / yield_min_delay — C++ ParkedRobotYieldsWhenThatIsCheaper와 같은 장면.
+    #     끄면 W는 윗줄로 돌아 t12(가장 빠른 t8보다 4 늦음), 켜면 P가 비켜 t8.
+    #     문턱 5면 4만큼 늦은 건 건너뛰어 t12.
+    yield_map = mapf_py.Map([".......", ".#####.", ".......", "##...##", "###.###"])
+    wp = [mapf_py.Agent(0, C(0, 2), C(6, 2)), mapf_py.Agent(1, C(3, 3), C(3, 3))]
+    wp_prev = {0: [ST(t, 2, t) for t in range(7)], 1: [ST(3, 3, 0)]}
+    wp_sched = mapf_py.schedule_from_plan(wp, wp_prev)
+
+    def ours(request_yield, min_delay=1):
+        c = mapf_py.ReplanConfig()
+        c.order = mapf_py.ReplanOrder.FIXED_FIRST
+        c.check_reachability = True
+        c.rescue_selection = mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+        c.request_yield = request_yield
+        c.yield_min_delay = min_delay
+        return c
+
+    def w_arrival(c):
+        r = mapf_py.PrioritizedPlanner(yield_map, replan_config=c).replan(wp, wp_prev, wp_sched, [C(3, 2)], 1)
+        return r.paths[0][-1], list(r.yielded_ids)
+
+    check(w_arrival(ours(False)) == (ST(6, 2, 12), []), "request_yield 끔: W는 t12, 비킨 로봇 없음")
+    check(w_arrival(ours(True)) == (ST(6, 2, 8), [1]), "request_yield 켬: P가 비켜 W는 t8")
+    check(w_arrival(ours(True, 5)) == (ST(6, 2, 12), []), "yield_min_delay=5: 4 늦은 건 건너뜀(t12)")
+
     print("\nSMOKE TEST PASSED")
 
 

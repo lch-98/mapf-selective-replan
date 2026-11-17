@@ -30,6 +30,9 @@ TEXT_COLOR = (20, 20, 20)
 DIVIDER_COLOR = (150, 150, 155)
 # 이번 스텝에 제자리에서 기다리는(양보 중인) 로봇 표시 색.
 WAIT_COLOR = (235, 140, 0)
+# 작업 중인 로봇 표시(21장 5-4): 굵은 검은 테두리 + 남은 작업 스텝 수.
+WORK_RING_COLOR = (20, 20, 20)
+WORK_TEXT_COLOR = (255, 255, 255)
 
 
 def agent_colors(num_agents: int) -> list:
@@ -102,6 +105,20 @@ def draw_robot(surface, layout: PanelLayout, panel_index: int, cell, color) -> N
     cx, cy = layout.cell_center(panel_index, cell.x, cell.y)
     pygame.draw.circle(surface, color, (cx, cy), CELL_SIZE // 2 - 2)
     pygame.draw.circle(surface, (20, 20, 20), (cx, cy), CELL_SIZE // 2 - 2, width=1)
+
+
+def draw_work_badge(surface, layout: PanelLayout, panel_index: int, cell, remaining: int, font) -> None:
+    """작업 중인 로봇(17장: 작업이 끝날 때까지 절대 안 움직임)을 표시한다. 로봇 색은 로봇마다
+    달라서 색으로는 구분이 안 되므로, 굵은 검은 테두리(모양)와 남은 작업 스텝 수(글자)로 보여 준다."""
+    cx, cy = layout.cell_center(panel_index, cell.x, cell.y)
+    radius = CELL_SIZE // 2 - 2
+    pygame.draw.circle(surface, WORK_RING_COLOR, (cx, cy), radius, width=3)
+    text = font.render(str(remaining), True, WORK_TEXT_COLOR)
+    shadow = font.render(str(remaining), True, WORK_RING_COLOR)
+    rect = text.get_rect(center=(cx, cy))
+    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        surface.blit(shadow, rect.move(dx, dy))
+    surface.blit(text, rect)
 
 
 def draw_wait_marker(surface, layout: PanelLayout, panel_index: int, cell) -> None:

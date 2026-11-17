@@ -8,7 +8,7 @@
 # 알고리즘 자체의 동작(Tier 0/1/안전망 등)은 core/include/mapf/prioritized_planner.hpp의
 # 주석과 docs/05_pbs.md, docs/06_selective_replan.md를 참고해야 한다.
 # ─────────────────────────────────────────────────────────────────
-from typing import Dict, List, Optional, overload
+from typing import ClassVar, Dict, List, Optional, overload
 
 class Cell:
     """격자 위의 한 칸. x=열(가로), y=행(세로). 왼쪽 위가 (0,0)."""
@@ -97,10 +97,39 @@ class AStarConfig:
 
     def __init__(self) -> None: ...
 
-class ReplanConfig:
-    """PrioritizedPlanner.replan()의 계층적 확장(Tiered Escalation) 설정."""
+class ReplanOrder:
+    """한 번의 재계획 시도에서 로봇을 장부에 등록하는 순서(12장)."""
 
-    max_escalation_tiers: int  # 기본값 1. Tier 1 이후 몇 단계까지 확장할지.
+    PRIORITY: ClassVar["ReplanOrder"]
+    """원래 방식: agents 순서(우선순위) 그대로."""
+    FIXED_FIRST: ClassVar["ReplanOrder"]
+    """고정 로봇 먼저 → 영향받은 로봇 → 구조 로봇(우리 방법)."""
+
+class RescueSelection:
+    """A*가 실패했을 때 구조 로봇을 고르는 방법(13장)."""
+
+    BLOCKED_CELLS: ClassVar["RescueSelection"]
+    """원래 방식: A*가 막혀 본 모든 칸의 주인."""
+    SHORTEST_PATH_CONFLICTS: ClassVar["RescueSelection"]
+    """다른 로봇이 없을 때의 가장 짧은 길과 부딪히는 로봇만(우리 방법)."""
+
+class ReplanConfig:
+    """PrioritizedPlanner.replan()의 설정. 기본값은 원래 방식이다.
+    우리 방법 = order=FIXED_FIRST, check_reachability=True,
+    rescue_selection=SHORTEST_PATH_CONFLICTS."""
+
+    max_escalation_tiers: int
+    """기본값 1. Tier 1 이후 몇 단계까지 확장할지."""
+    order: ReplanOrder
+    """기본값 PRIORITY."""
+    check_reachability: bool
+    """기본값 False. 로봇이 아무도 없어도 못 가면 바로 실패(13장)."""
+    rescue_selection: RescueSelection
+    """기본값 BLOCKED_CELLS."""
+    request_yield: bool
+    """기본값 False. 크게 돌아가게 됐으면 서 있는 로봇에게 비켜 달라고 한 번 더 시도(19장)."""
+    yield_min_delay: int
+    """기본값 1. 가장 빠른 도착보다 이만큼 이상 늦은 로봇이 있을 때만 비켜 달라고 한다."""
 
     def __init__(self) -> None: ...
 

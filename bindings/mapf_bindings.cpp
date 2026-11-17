@@ -105,9 +105,36 @@ PYBIND11_MODULE(mapf_py, m) {
         .def(py::init<>())
         .def_readwrite("max_timestep", &AStarConfig::max_timestep);
 
+    // 재계획 스위치(12·13·19장). 21장 5-1에서 전부 노출 — 전에는 max_escalation_tiers만 있어서
+    // 파이썬(GUI)에서 "우리 방법"(고정 먼저 + 도달 확인 + 경로 구조)을 고를 수 없었다.
+    py::enum_<ReplanOrder>(m, "ReplanOrder")
+        .value("PRIORITY", ReplanOrder::kPriority)
+        .value("FIXED_FIRST", ReplanOrder::kFixedFirst);
+
+    py::enum_<RescueSelection>(m, "RescueSelection")
+        .value("BLOCKED_CELLS", RescueSelection::kBlockedCells)
+        .value("SHORTEST_PATH_CONFLICTS", RescueSelection::kShortestPathConflicts);
+
     py::class_<ReplanConfig>(m, "ReplanConfig")
         .def(py::init<>())
-        .def_readwrite("max_escalation_tiers", &ReplanConfig::max_escalation_tiers);
+        .def_readwrite("max_escalation_tiers", &ReplanConfig::max_escalation_tiers)
+        .def_readwrite("order", &ReplanConfig::order)
+        .def_readwrite("check_reachability", &ReplanConfig::check_reachability)
+        .def_readwrite("rescue_selection", &ReplanConfig::rescue_selection)
+        .def_readwrite("request_yield", &ReplanConfig::request_yield)
+        .def_readwrite("yield_min_delay", &ReplanConfig::yield_min_delay)
+        .def("__repr__", [](const ReplanConfig& c) {
+            return std::string("ReplanConfig(max_escalation_tiers=") +
+                   std::to_string(c.max_escalation_tiers) + ", order=" +
+                   (c.order == ReplanOrder::kFixedFirst ? "FIXED_FIRST" : "PRIORITY") +
+                   ", check_reachability=" + (c.check_reachability ? "True" : "False") +
+                   ", rescue_selection=" +
+                   (c.rescue_selection == RescueSelection::kShortestPathConflicts
+                        ? "SHORTEST_PATH_CONFLICTS"
+                        : "BLOCKED_CELLS") +
+                   ", request_yield=" + (c.request_yield ? "True" : "False") +
+                   ", yield_min_delay=" + std::to_string(c.yield_min_delay) + ")";
+        });
 
     // ── 근무표 (TaskWindow, TaskState, 근무표 함수) ───────────────
     // 17장 결정 3·9. TaskSchedule(= std::unordered_map<int, TaskWindow>)은 PlanResult처럼

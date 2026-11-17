@@ -29,6 +29,8 @@ FAIL_COLOR: Tuple[int, int, int]
 TEXT_COLOR: Tuple[int, int, int]
 DIVIDER_COLOR: Tuple[int, int, int]
 WAIT_COLOR: Tuple[int, int, int]  # 기다리는(양보 중인) 로봇 표시 색
+WORK_RING_COLOR: Tuple[int, int, int]  # 작업 중인 로봇의 테두리 색
+WORK_TEXT_COLOR: Tuple[int, int, int]  # 작업 중인 로봇의 남은 스텝 수 글자 색
 
 def agent_colors(num_agents: int) -> List[Tuple[int, int, int]]:
     """에이전트 id별 고유 색을 HSV 색상환에서 균등 분배해서 생성한다.
@@ -82,6 +84,13 @@ def draw_path(
 
 def draw_robot(surface: "pygame.Surface", layout: PanelLayout, panel_index: int, cell, color) -> None:
     """로봇 한 대를 cell 위치에 원으로 그린다."""
+    ...
+
+def draw_work_badge(
+    surface: "pygame.Surface", layout: PanelLayout, panel_index: int, cell, remaining: int, font
+) -> None:
+    """작업 중인 로봇(작업이 끝날 때까지 절대 안 움직임, 17장)에 굵은 검은 테두리와
+    남은 작업 스텝 수를 그린다(21장 5-4)."""
     ...
 
 def draw_wait_marker(surface: "pygame.Surface", layout: PanelLayout, panel_index: int, cell) -> None:

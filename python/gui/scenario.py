@@ -27,25 +27,41 @@ def collect_free_cells(game_map: "mapf_py.Map") -> list:
     return cells
 
 
-def make_random_agents(free_cells: list, num_agents: int, rng: random.Random) -> list:
+def make_random_agents(
+    free_cells: list,
+    num_agents: int,
+    rng: random.Random,
+    service_range: tuple = (0, 0),
+    service_rng: random.Random = None,
+) -> list:
     """빈 칸 중에서 서로 겹치지 않는 (start, goal) 쌍을 num_agents개 뽑는다.
 
     시작점끼리는 서로 안 겹치고, 목적지끼리도 서로 안 겹치지만, 한 로봇
     자신의 start==goal은 허용한다(tools/benchmark.cpp와 동일한 규칙).
+
+    작업 시간(21장 5-4): service_range=(LO, HI)에서 HI > 0이면 로봇마다 LO~HI 정수를
+    service_rng에서 뽑는다. 벤치마크처럼 rng와 다른 난수라서, 작업 시간을 켜도 로봇 배치는 같다.
     """
     shuffled_starts = list(free_cells)
     shuffled_goals = list(free_cells)
     rng.shuffle(shuffled_starts)
     rng.shuffle(shuffled_goals)
 
+    lo, hi = service_range
     agents = []
     for i in range(num_agents):
-        agents.append(mapf_py.Agent(i, shuffled_starts[i], shuffled_goals[i]))
+        service_time = service_rng.randint(lo, hi) if hi > 0 else 0
+        agents.append(mapf_py.Agent(i, shuffled_starts[i], shuffled_goals[i], service_time))
     return agents
 
 
 def find_solvable_scenario(
-    game_map: "mapf_py.Map", num_agents: int, rng: random.Random, max_attempts: int = 200
+    game_map: "mapf_py.Map",
+    num_agents: int,
+    rng: random.Random,
+    max_attempts: int = 200,
+    service_range: tuple = (0, 0),
+    service_rng: random.Random = None,
 ):
     """초기 PrioritizedPlanner.plan()이 성공하는 무작위 배치를 찾을 때까지 재시도한다.
 
@@ -60,7 +76,7 @@ def find_solvable_scenario(
     free_cells = collect_free_cells(game_map)
 
     for _attempt in range(1, max_attempts + 1):
-        agents = make_random_agents(free_cells, num_agents, rng)
+        agents = make_random_agents(free_cells, num_agents, rng, service_range, service_rng)
         planner = mapf_py.PrioritizedPlanner(game_map)
         initial = planner.plan(agents)
         if initial is not None:

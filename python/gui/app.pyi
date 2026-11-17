@@ -16,8 +16,14 @@ from typing import List, Optional
 import mapf_py
 
 def parse_args() -> argparse.Namespace:
-    """--map(open|corridor, 기본 corridor), --agents(기본 8),
-    --seed(기본 None=매번 무작위)를 파싱한다."""
+    """--map(open|corridor, 기본 corridor), --agents(기본 30),
+    --seed(기본 None=매번 무작위), --service LO HI(작업 시간 분포, 기본 0 0),
+    --method ours|legacy(오른쪽 패널의 방법, 기본 ours)를 파싱한다."""
+    ...
+
+def make_replan_config(method: str) -> "mapf_py.ReplanConfig":
+    """오른쪽 패널의 재계획 설정. ours = 고정 먼저 + 도달 확인 + 경로 구조
+    (벤치마크의 우리 방법과 같음), legacy = 기본값(원래 방식)."""
     ...
 
 class ReplanSideResult:
@@ -30,6 +36,8 @@ class ReplanSideResult:
     escalation_tier: Optional[int]
     """selective 쪽만 의미 있는 값(0=Tier0, 1+=확장, -1=안전망).
     full_replan 쪽은 이 개념이 없으므로 항상 None."""
+    schedule: dict
+    """이 패널의 근무표(로봇 id -> TaskWindow, 17장). 재계획마다 통째로 바꿔 끼운다."""
     note: str
     """부가 안내 문구. 예: "(영향받은 로봇 없음 — 두 방법 다 변화 없이
     성공)", "(재계획 실패 — 로봇이 현재 위치에 멈춘 상태로 표시됨)"."""
@@ -93,10 +101,14 @@ class App:
         보이는 착시가 생긴다."""
         ...
 
-    def waiting_agent_ids(self, paths: "mapf_py.PlanResult") -> set:
+    def working_remaining(self, schedule: dict) -> dict:
+        """지금 작업 중인 로봇 id -> 남은 작업 스텝 수. 작업 시간 0이면 항상 빈 dict."""
+        ...
+
+    def waiting_agent_ids(self, paths: "mapf_py.PlanResult", schedule: dict) -> set:
         """이번 스텝(t -> t+1)에 제자리에 머물다가 나중에 다시 움직일 로봇 id
         (= 양보하며 기다리는 로봇). 목적지 도착 후 머무는 로봇, 실패로 멈춘
-        로봇은 제외. draw()가 W키로 켠 강조 표시와 상태 바 개수에 쓴다."""
+        로봇, 작업 중인 로봇은 제외. draw()가 W키로 켠 강조 표시와 상태 바 개수에 쓴다."""
         ...
 
     def step_forward(self) -> None:

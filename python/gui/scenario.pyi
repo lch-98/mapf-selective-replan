@@ -7,7 +7,7 @@
 # 실제 경로 계산(PrioritizedPlanner.plan)은 바인딩된 mapf_py.PrioritizedPlanner를 그대로 호출한다.
 # ─────────────────────────────────────────────────────────────────
 import random
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import mapf_py
 
@@ -16,11 +16,16 @@ def collect_free_cells(game_map: "mapf_py.Map") -> List["mapf_py.Cell"]:
     ...
 
 def make_random_agents(
-    free_cells: List["mapf_py.Cell"], num_agents: int, rng: random.Random
+    free_cells: List["mapf_py.Cell"],
+    num_agents: int,
+    rng: random.Random,
+    service_range: Tuple[int, int] = (0, 0),
+    service_rng: Optional[random.Random] = None,
 ) -> List["mapf_py.Agent"]:
     """빈 칸 중에서 서로 겹치지 않는 (start, goal) 쌍을 num_agents개
     무작위로 뽑는다. 시작점끼리는 서로 안 겹치고 목적지끼리도 서로 안
-    겹치지만, 한 로봇 자신의 start==goal은 허용한다."""
+    겹치지만, 한 로봇 자신의 start==goal은 허용한다.
+    service_range=(LO, HI)에서 HI > 0이면 작업 시간을 service_rng에서 LO~HI 정수로 뽑는다."""
     ...
 
 def find_solvable_scenario(
@@ -28,6 +33,8 @@ def find_solvable_scenario(
     num_agents: int,
     rng: random.Random,
     max_attempts: int = 200,
+    service_range: Tuple[int, int] = (0, 0),
+    service_rng: Optional[random.Random] = None,
 ) -> Tuple[List["mapf_py.Agent"], "mapf_py.PlanResult"]:
     """초기 PrioritizedPlanner.plan()이 성공하는 무작위 배치를 찾을 때까지 재시도한다.
     성공하면 (agents, initial_paths) 튜플을 반환한다. max_attempts번 안에

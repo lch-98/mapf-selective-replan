@@ -77,6 +77,12 @@ struct ScenarioResult {
     // 수의 합. 경로 비용 합과 달리, 비켜 준 로봇은 실제로 비켜 있던 스텝만 더해진다.
     int full_replan_away{-1};
     int selective_away{-1};
+    // 21장 5-2(20장 원칙 4): 시나리오를 설명하는 열 2개 + 결과 열 3개.
+    int current_time{-1};              // 장애물이 나타난 시각
+    int working_at_t{-1};              // 그 시각에 작업 중이던 로봇 수(작업 시간을 켰을 때만 0보다 큼)
+    int full_replan_delayed{-1};       // 처음 계획보다 목적지에 늦게 (다시) 도착한 로봇 수
+    int selective_delayed{-1};
+    int selective_rescued{-1};         // 구조 로봇 수(rescued_ids 크기)
 };
 
 // 맵의 빈 칸(벽이 아닌 칸) 전부를 모은다.
@@ -144,6 +150,17 @@ int count_away(const std::vector<Agent>& agents, const PlanResult& paths, int cu
         }
     }
     return total;
+}
+
+// 처음 계획보다 목적지에 늦게 도착하게 된 로봇 수(20장 원칙 4 "늦어진 로봇 수"). 도착 시각은
+// arrival_time(마지막으로 목적지에 들어온 시각)이라, 주차 중에 구조되어 비켰다가 돌아온 로봇도 늦어진
+// 것으로 센다. 길이만 같은 다른 길을 골라도 도착 시각은 같으므로 동점 규칙에 흔들리지 않는다.
+int count_delayed(const PlanResult& before, const PlanResult& after) {
+    int delayed = 0;
+    for (const auto& [id, old_path] : before) {
+        if (arrival_time(after.at(id)) > arrival_time(old_path)) ++delayed;
+    }
+    return delayed;
 }
 
 // current_time 이후의 움직임이 before와 달라진 로봇 수. 경로 벡터를 그대로 비교하면
@@ -412,6 +429,17 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
     ScenarioResult result;
     result.plan_ok = true;
     result.initial_soc = sum_of_costs(initial);
+    result.current_time = current_time;
+
+    // 근무표(17장). 처음 계획의 결과이므로 schedule_from_plan으로 읽는다. 21장 5-2부터 두 방법 모두
+    // 근무표 버전 replan/full_replan을 부른다 — 예전 버전은 작업 시간이 전부 0일 때만 쓸 수 있다.
+    const TaskSchedule schedule = schedule_from_plan(agents, initial);
+    result.working_at_t = 0;
+    for (const Agent& agent : agents) {
+        if (task_state_at(schedule.at(agent.id), current_time) == TaskState::kWorking) {
+            ++result.working_at_t;
+        }
+    }
 
     // 경로 품질은 타이머 밖에서 계산한다(실행 시간에 섞이지 않게).
 
@@ -419,13 +447,14 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
     {
         PrioritizedPlanner planner_a(map);
         auto t0 = std::chrono::steady_clock::now();
-        std::optional<PlanResult> full = planner_a.full_replan(agents, initial, obstacles, current_time);
+        std::optional<PlanResult> full = planner_a.full_replan(agents, initial, schedule, obstacles, current_time);
         result.full_replan_ms = elapsed_ms(t0);
         result.full_replan_ok = full.has_value();
         if (full.has_value()) {
             result.full_replan_soc = sum_of_costs(*full);
             result.full_replan_changed = count_changed(initial, *full, current_time);
             result.full_replan_away = count_away(agents, *full, current_time);
+            result.full_replan_delayed = count_delayed(initial, *full);
         }
     }
 
@@ -433,7 +462,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
     {
         PrioritizedPlanner planner_b(map, AStarConfig{}, replan_config);
         auto t0 = std::chrono::steady_clock::now();
-        std::optional<ReplanResult> selective = planner_b.replan(agents, initial, obstacles, current_time);
+        std::optional<ReplanResult> selective = planner_b.replan(agents, initial, schedule, obstacles, current_time);
         result.selective_replan_ms = elapsed_ms(t0);
         result.selective_replan_ok = selective.has_value();
         if (selective.has_value()) {
@@ -444,6 +473,8 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
             result.selective_conflicts = count_conflicts(selective->paths);
             result.selective_yielded = static_cast<int>(selective->yielded_ids.size());
             result.selective_away = count_away(agents, selective->paths, current_time);
+            result.selective_delayed = count_delayed(initial, selective->paths);
+            result.selective_rescued = static_cast<int>(selective->rescued_ids.size());
         }
     }
 
@@ -463,14 +494,24 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
 //
 // max_attempts번 안에 못 찾으면(극히 드문 경우) 마지막 실패를 그대로
 // plan_ok=false로 기록하고 멈춘다 — 무한 루프를 막기 위한 안전장치다.
+//
+// 작업 시간(21장 5-3): service_hi > 0이면 로봇마다 U[service_lo, service_hi] 정수를 service_rng에서
+// 뽑는다. rng(로봇 배치·장애물)와 다른 난수 생성기를 쓰므로, 작업 시간을 켜도 rng의 흐름이 그대로라
+// 로봇 배치·장애물·장애물 시각이 꺼진 경우와 같다(20장 원칙 5 "짝지은 비교").
 ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, std::mt19937& rng,
-                                              const ReplanConfig& replan_config) {
+                                              const ReplanConfig& replan_config,
+                                              std::mt19937& service_rng, int service_lo,
+                                              int service_hi) {
     constexpr int kMaxAttempts = 200;
 
     std::vector<Cell> free_cells = collect_free_cells(map); // 벽이 아닌 모든 Cell들을 수집
 
     for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
         std::vector<Agent> agents = make_random_agents(free_cells, num_agents, rng); // 벽이 아닌 모든 Cell 들에서 시작점과 도착점을 랜덤으로 에이전트에 할당
+        if (service_hi > 0) {
+            std::uniform_int_distribution<int> service_dist(service_lo, service_hi);
+            for (Agent& agent : agents) agent.service_time = service_dist(service_rng);
+        }
 
         PrioritizedPlanner planner(map);
         std::optional<PlanResult> initial = planner.plan(agents);
@@ -525,6 +566,8 @@ struct Task {
     int trial;
     uint32_t seed;  // 이 task 전용 시드 — 스레드 간에 절대 공유하지 않는다.
     ReplanConfig replan_config;  // 방법 B(replan)의 설정(--tiers). 모든 task가 같은 값.
+    int service_lo{0};           // 작업 시간 분포 U[service_lo, service_hi](--service). hi가 0이면 끔.
+    int service_hi{0};
 };
 
 // 작업 하나를 처리해서 CSV 한 줄(개행 포함)을 문자열로 만들어 돌려준다.
@@ -534,8 +577,12 @@ struct Task {
 // 어떤 순서로 끝났든 상관없이) 한 번에 출력한다.
 std::string run_task(const Task& task) {
     std::mt19937 rng(task.seed);  // 이 task만의 독립 RNG — 다른 스레드와 공유 없음.
-    ScenarioResult r =
-        find_solvable_scenario_and_run(*task.map, task.num_agents, rng, task.replan_config);
+    // 작업 시간 전용 RNG. 같은 task 씨앗에서 만들지만 rng와 다른 흐름이다(21장 21.2).
+    std::seed_seq service_seed{task.seed, 1u};
+    std::mt19937 service_rng(service_seed);
+    ScenarioResult r = find_solvable_scenario_and_run(*task.map, task.num_agents, rng,
+                                                      task.replan_config, service_rng,
+                                                      task.service_lo, task.service_hi);
 
     std::ostringstream out;
     out << task.map_name << "," << task.num_agents << "," << task.trial << ","
@@ -544,7 +591,9 @@ std::string run_task(const Task& task) {
         << r.selective_replan_ms << "," << r.escalation_tier << "," << r.initial_soc << ","
         << r.full_replan_soc << "," << r.full_replan_changed << "," << r.selective_replan_soc << ","
         << r.selective_replan_changed << "," << r.selective_replanned << "," << r.selective_conflicts
-        << "," << r.selective_yielded << "," << r.full_replan_away << "," << r.selective_away << "\n";
+        << "," << r.selective_yielded << "," << r.full_replan_away << "," << r.selective_away << ","
+        << r.current_time << "," << r.working_at_t << "," << r.full_replan_delayed << ","
+        << r.selective_delayed << "," << r.selective_rescued << "\n";
     return out.str();
 }
 
@@ -570,8 +619,12 @@ int main(int argc, char** argv) {
     // --yield    : 재계획이 성공한 뒤 늦어진 로봇이 있으면 서 있는 로봇에게 비켜 달라고 한 번 더
     //              시도한다(ReplanConfig::request_yield, 19장).
     // --yield-min-delay N : 가장 빠른 도착보다 N스텝 이상 늦은 로봇이 있을 때만 시도(기본 1).
+    // --service LO HI : 로봇마다 작업 시간을 U[LO, HI] 정수로 준다(21장 5-3). 별도 난수라서 로봇 배치·
+    //                    장애물은 옵션이 없을 때와 같다. 없으면 전부 0(예전과 같음).
     bool large = false;
     int repeats = 50;
+    int service_lo = 0;
+    int service_hi = 0;
     ReplanConfig replan_config;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -595,6 +648,13 @@ int main(int argc, char** argv) {
             replan_config.check_reachability = true;
         } else if (arg == "--yield") {
             replan_config.request_yield = true;
+        } else if (arg == "--service" && i + 2 < argc) {
+            service_lo = std::atoi(argv[++i]);
+            service_hi = std::atoi(argv[++i]);
+            if (service_lo < 0 || service_hi < service_lo) {
+                std::cerr << "--service needs 0 <= LO <= HI\n";
+                return 1;
+            }
         } else if (arg == "--yield-min-delay" && i + 1 < argc) {
             replan_config.yield_min_delay = std::atoi(argv[++i]);
         } else if (arg == "--rescue" && i + 1 < argc) {
@@ -609,7 +669,7 @@ int main(int argc, char** argv) {
             }
         } else {
             std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K] "
-                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N]\n";
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI]\n";
             return 1;
         }
     }
@@ -647,7 +707,8 @@ int main(int argc, char** argv) {
             for (int trial = 0; trial < kRepeats; ++trial) {
                 uint32_t seed = kBaseSeed + static_cast<uint32_t>(tasks.size());
                 tasks.push_back(
-                    Task{&named_map.map, named_map.name, num_agents, trial, seed, replan_config});
+                    Task{&named_map.map, named_map.name, num_agents, trial, seed, replan_config,
+                         service_lo, service_hi});
             }
         }
     }
@@ -681,7 +742,8 @@ int main(int argc, char** argv) {
     std::cout << "map,num_agents,trial,plan_attempts,plan_ok,full_replan_ok,full_replan_ms,"
                  "selective_replan_ok,selective_replan_ms,escalation_tier,initial_soc,"
                  "full_replan_soc,full_replan_changed,selective_replan_soc,"
-                 "selective_replan_changed,selective_replanned,selective_conflicts,selective_yielded,full_replan_away,selective_away\n";
+                 "selective_replan_changed,selective_replanned,selective_conflicts,selective_yielded,full_replan_away,selective_away,"
+                 "current_time,working_at_t,full_replan_delayed,selective_delayed,selective_rescued\n";
     for (const std::string& line : results) std::cout << line;
 
     return 0;
