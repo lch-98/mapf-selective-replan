@@ -612,7 +612,10 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
             for (Agent& agent : agents) agent.service_time = service_dist(service_rng);
         }
 
-        PrioritizedPlanner planner(map);
+        // 처음 계획은 동점 규칙을 기본으로 두고 시간 상한만 재계획과 맞춘다(--max-timestep).
+        AStarConfig initial_config;
+        initial_config.max_timestep = astar_config.max_timestep;
+        PrioritizedPlanner planner(map, initial_config);
         std::optional<PlanResult> initial = planner.plan(agents);
         if (!initial.has_value()) {
             if (attempt == kMaxAttempts) {
@@ -727,6 +730,12 @@ int main(int argc, char** argv) {
     // --service LO HI : 로봇마다 작업 시간을 U[LO, HI] 정수로 준다(21장 5-3). 별도 난수라서 로봇 배치·
     //                    장애물은 옵션이 없을 때와 같다. 없으면 전부 0(예전과 같음).
     bool large = false;
+    // --huge : 더 큰 규모(23장 추가 실험) — 128x128 맵, 로봇 300/500/750/1000대.
+    bool huge = false;
+    // --max-timestep N : A* 시간 상한(기본 256, --huge면 512). 처음 계획과 두 재계획 모두에 적용.
+    int max_timestep = -1;
+    // --agents a,b,c : 로봇 수 목록을 직접 지정(맵 크기는 --large/--huge로 정함).
+    std::vector<int> custom_counts;
     int repeats = 50;
     int service_lo = 0;
     int service_hi = 0;
@@ -742,6 +751,14 @@ int main(int argc, char** argv) {
         std::string arg = argv[i];
         if (arg == "--large") {
             large = true;
+        } else if (arg == "--huge") {
+            huge = true;
+        } else if (arg == "--max-timestep" && i + 1 < argc) {
+            max_timestep = std::atoi(argv[++i]);
+        } else if (arg == "--agents" && i + 1 < argc) {
+            std::stringstream list(argv[++i]);
+            std::string item;
+            while (std::getline(list, item, ',')) custom_counts.push_back(std::atoi(item.c_str()));
         } else if (arg == "--repeats" && i + 1 < argc) {
             repeats = std::atoi(argv[++i]);
         } else if (arg == "--tiers" && i + 1 < argc) {
@@ -810,15 +827,21 @@ int main(int argc, char** argv) {
                 return 1;
             }
         } else {
-            std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K] "
+            std::cerr << "usage: run_benchmark [--large | --huge] [--agents a,b,c] [--max-timestep N] [--repeats N] [--tiers K] "
                          "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing]\n";
             return 1;
         }
     }
     const std::vector<int> agent_counts =
-        large ? std::vector<int>{50, 100, 150, 200} : std::vector<int>{5, 10, 20, 40};
+        !custom_counts.empty() ? custom_counts
+        : huge    ? std::vector<int>{300, 500, 750, 1000}
+        : large ? std::vector<int>{50, 100, 150, 200}
+                : std::vector<int>{5, 10, 20, 40};
     const int kRepeats = repeats;
-    const int map_size = large ? 64 : kMapSize;
+    const int map_size = huge ? 128 : (large ? 64 : kMapSize);
+    // 128x128에서는 먼 거리 경로가 256스텝에 가까워 시간 상한 때문에 실패·느린 탐색이 생기므로 512를 기본으로 한다.
+    if (max_timestep < 0) max_timestep = huge ? 512 : AStarConfig{}.max_timestep;
+    astar_config.max_timestep = max_timestep;
 
     struct NamedMap {
         const char* name;
