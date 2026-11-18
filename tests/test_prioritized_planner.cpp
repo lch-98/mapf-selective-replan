@@ -1184,3 +1184,69 @@ TEST(SelectiveReplanTest, WorkingRobotYieldsOnlyIfItsTaskEndsSoon) {
         EXPECT_EQ(result->paths.at(1), s.previous_paths.at(1));  // P는 그대로 작업
     }
 }
+
+// ───────────────────────────────────────────────────────────────
+// 22장 — BFS 길 메모장: 재계획 한 번 안에서 같은 (출발 칸, 목적지)의 BFS는 한 번만 계산한다.
+// ───────────────────────────────────────────────────────────────
+
+TEST(SelectiveReplanTest, RouteMemoComputesEachRouteOnceAndKeepsResult) {
+    // ShortestPathRescueCallsOnlyAgentsOnTheRoute와 같은 장면에 도달 확인을 켠다.
+    //   - ② 도달 확인: W(1번)의 BFS를 계산한다(1번째 계산).
+    //   - Tier 0에서 W의 A*가 실패 → ③ 구조 후보: W의 같은 길이 필요한데 메모장에서 꺼낸다(계산 없음).
+    // 그래서 BFS 계산은 1번. 메모장이 없으면 2번이다. 결과(K만 구조)는 메모장과 상관없이 같아야 한다.
+    Map map(std::vector<std::string>{
+        "####.###",
+        ".##...##",
+        "........",
+    });
+    std::vector<Agent> agents = {
+        Agent{0, Cell{4, 1}, Cell{4, 1}},  // K
+        Agent{1, Cell{0, 2}, Cell{6, 2}},  // W
+        Agent{2, Cell{0, 1}, Cell{0, 1}},  // Z
+    };
+    PlanResult previous_paths;
+    previous_paths[0] = Path{SpaceTimeCell{4, 1, 0}};
+    previous_paths[1] = Path{
+        SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
+        SpaceTimeCell{3, 2, 3}, SpaceTimeCell{4, 2, 4}, SpaceTimeCell{5, 2, 5},
+        SpaceTimeCell{6, 2, 6},
+    };
+    previous_paths[2] = Path{SpaceTimeCell{0, 1, 0}};
+
+    ReplanConfig config;
+    config.order = ReplanOrder::kFixedFirst;
+    config.check_reachability = true;
+    config.rescue_selection = RescueSelection::kShortestPathConflicts;
+    PrioritizedPlanner planner(map, AStarConfig{}, config);
+    auto result = planner.replan(agents, previous_paths, {Cell{4, 2}}, /*current_time=*/3);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 1);
+    EXPECT_EQ(result->rescued_ids, std::vector<int>{0});
+    EXPECT_EQ(planner.last_route_computations(), 1);
+    expect_conflict_free(result->paths);
+}
+
+TEST(SelectiveReplanTest, RouteMemoIsClearedForEachReplan) {
+    // 같은 플래너로 두 번 재계획한다. 로봇 (0,1) → (4,1), 3줄짜리 빈 지도.
+    //   1번째: x=2 세로 줄 전체가 막혀 길이 없다 → 도달 확인에서 바로 실패. 메모장에 "빈 길"이 적힌다.
+    //   2번째: (2,1) 한 칸만 막힌다 → 위나 아래로 돌아 t6에 도착해야 한다.
+    // 메모장을 재계획마다 비우지 않으면, 2번째가 열쇠가 같은 1번째의 빈 길을 보고 실패한다.
+    Map map(5, 3);
+    std::vector<Agent> agents = {Agent{0, Cell{0, 1}, Cell{4, 1}}};
+    ReplanConfig config;
+    config.order = ReplanOrder::kFixedFirst;
+    config.check_reachability = true;
+    config.rescue_selection = RescueSelection::kShortestPathConflicts;
+    PrioritizedPlanner planner(map, AStarConfig{}, config);
+    auto initial = planner.plan(agents);
+    ASSERT_TRUE(initial.has_value());
+
+    EXPECT_FALSE(planner.replan(agents, *initial, {Cell{2, 0}, Cell{2, 1}, Cell{2, 2}}, 0).has_value());
+    EXPECT_EQ(planner.last_route_computations(), 1);
+
+    auto second = planner.replan(agents, *initial, {Cell{2, 1}}, 0);
+    ASSERT_TRUE(second.has_value());
+    EXPECT_EQ(second->paths.at(0).back(), (SpaceTimeCell{4, 1, 6}));
+    EXPECT_EQ(planner.last_route_computations(), 1);
+}

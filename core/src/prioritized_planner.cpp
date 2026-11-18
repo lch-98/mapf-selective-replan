@@ -307,7 +307,7 @@ bool PrioritizedPlanner::try_yield_requests(const std::vector<Agent>& agents,
         if (task_state_at(schedule.at(agent.id), current_time) != TaskState::kMoving) continue;
 
         Cell here = position_at(previous_paths.at(agent.id), current_time);
-        std::vector<Cell> route = static_shortest_path(map_, here, agent.goal, new_obstacles);
+        const std::vector<Cell>& route = shortest_route(here, agent.goal, new_obstacles);
         if (route.empty()) continue;
         int fastest_arrival = current_time + static_cast<int>(route.size()) - 1;
         int arrival = paths.at(agent.id).back().t - agent.service_time;  // 작업 칸 앞 = 도착
@@ -479,11 +479,26 @@ std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<A
     return result;
 }
 
+const std::vector<Cell>& PrioritizedPlanner::shortest_route(Cell from, Cell goal,
+                                                           const std::vector<Cell>& new_obstacles) const {
+    const auto index = [this](Cell c) {
+        return static_cast<std::uint64_t>(c.y) * static_cast<std::uint64_t>(map_.width()) +
+               static_cast<std::uint64_t>(c.x);
+    };
+    const std::uint64_t key = (index(from) << 32) | index(goal);
+    auto it = route_memo_.find(key);
+    if (it == route_memo_.end()) {
+        ++route_computations_;
+        it = route_memo_.emplace(key, static_shortest_path(map_, from, goal, new_obstacles)).first;
+    }
+    return it->second;
+}
+
 std::vector<SpaceTimeCell> PrioritizedPlanner::shortest_path_conflicts(Cell from, Cell goal,
                                                          const std::vector<Cell>& new_obstacles,
                                                          int current_time) const {
     std::vector<SpaceTimeCell> conflicts;
-    std::vector<Cell> route = static_shortest_path(map_, from, goal, new_obstacles);
+    const std::vector<Cell>& route = shortest_route(from, goal, new_obstacles);
     if (route.empty()) return conflicts;
 
     // route[i]에는 current_time + i에 있다고 본다(쉬지 않고 가는 가장 빠른 일정).
@@ -570,6 +585,10 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
                                          const TaskSchedule& previous_schedule,
                                          const std::vector<Cell>& new_obstacles,
                                          int current_time) {
+    // 22장 메모장은 이 재계획 한 번 동안만 쓴다. 지난 재계획의 길은 새 장애물이 달랐을 수 있으므로 버린다.
+    route_memo_.clear();
+    route_computations_ = 0;
+
     // 1단계: 영향받는 로봇 판별 (06장 6.4절).
     std::vector<int> working_ids;
     for (const Agent& agent : agents) {
@@ -588,8 +607,7 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
                 ReplanStart start =
                     replan_start(agent, previous_schedule.at(agent.id), current_time);
                 Cell here = position_at(old_path, start.time);
-                std::vector<Cell> route =
-                    static_shortest_path(map_, here, agent.goal, new_obstacles);
+                const std::vector<Cell>& route = shortest_route(here, agent.goal, new_obstacles);
                 if (route.empty()) return std::nullopt;
                 int earliest_arrival = start.time + static_cast<int>(route.size()) - 1;
                 if (earliest_arrival + start.service > config_.max_timestep) return std::nullopt;

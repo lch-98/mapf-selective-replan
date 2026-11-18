@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -176,6 +177,10 @@ public:
     static bool path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
                                     int current_time);
 
+    // 마지막 replan()에서 "다른 로봇이 없을 때의 가장 짧은 길"(BFS)을 실제로 계산한 횟수(22장).
+    // 같은 (출발 칸, 목적지)는 메모장에서 꺼내 쓰므로 세지 않는다. 테스트·확인용.
+    int last_route_computations() const { return route_computations_; }
+
 private:
     // 경로를 테이블에 등록한다: 모든 (칸,시각)과 모든 이동을 등록하고,
     // 마지막으로 목적지 칸을 도착 시각부터 max_timestep까지 추가로
@@ -258,10 +263,24 @@ private:
                                                         const std::vector<Cell>& new_obstacles,
                                                         int current_time) const;
 
+    // from → goal의 "다른 로봇이 없을 때의 가장 짧은 길"(벽 + 새 장애물만 보는 BFS, 13장). 22장 메모장:
+    // replan() 한 번 안에서 같은 (from, goal)은 처음 한 번만 계산하고 그 뒤로는 저장한 것을 돌려준다.
+    // BFS는 다른 로봇·장부를 보지 않고, 새 장애물은 replan() 한 번 안에서 같으므로 결과가 반드시 같다.
+    // 길(칸 목록)만 저장한다 — "그 길 위에 누가 있나"는 장부가 시도마다 바뀌므로 쓸 때마다 조회한다.
+    // 못 가면 빈 목록.
+    const std::vector<Cell>& shortest_route(Cell from, Cell goal,
+                                            const std::vector<Cell>& new_obstacles) const;
+
     const Map& map_;
     AStarConfig config_;
     ReplanConfig replan_config_;
     ReservationTable table_;
+
+    // 22장 메모장: 열쇠 = (출발 칸 번호 << 32) | 목적지 칸 번호. replan()을 시작할 때 비운다 — 다음 재계획은
+    // 새 장애물이 다를 수 있다. shortest_path_conflicts(const)에서도 채우므로 mutable.
+    // unordered_map은 원소를 더해도 기존 원소의 참조가 그대로라 shortest_route가 참조를 돌려줘도 안전하다.
+    mutable std::unordered_map<std::uint64_t, std::vector<Cell>> route_memo_;
+    mutable int route_computations_{0};
 };
 
 }  // namespace mapf
