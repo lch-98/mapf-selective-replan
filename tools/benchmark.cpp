@@ -41,6 +41,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <map>
+#include <queue>
 #include <random>
 #include <sstream>
 #include <string>
@@ -83,6 +84,9 @@ struct ScenarioResult {
     int full_replan_delayed{-1};       // 처음 계획보다 목적지에 늦게 (다시) 도착한 로봇 수
     int selective_delayed{-1};
     int selective_rescued{-1};         // 구조 로봇 수(rescued_ids 크기)
+    // 23장 실험 ①: 장애물 순간 아직 목적지에 도착하지 않은 로봇 수(처음 계획 기준). 재계획을 기다리는 동안
+    // 멈추면 도착이 늦어지는 로봇들이다.
+    int moving_at_t{-1};
 };
 
 // 맵의 빈 칸(벽이 아닌 칸) 전부를 모은다.
@@ -285,6 +289,61 @@ std::vector<SpaceTimeCell> collect_path_cells(const PlanResult& initial,
     return cells;
 }
 
+// 장애물 고르는 방식(23장 실험 ②).
+enum class ObstacleMode {
+    kPath,      // 기본: 누군가 지나갈 칸 중 무작위(지금까지와 같음)
+    kStanding,  // 그중 "막힌 로봇의 가장 짧은 우회로 위에 이미 도착해 서 있는 로봇이 있는" 칸만
+};
+
+// 다른 로봇을 무시하고 벽과 blocked 칸만 피하는 from → to 최단 경로(BFS). 못 가면 빈 목록.
+// core의 static_shortest_path와 같은 일을 하지만, 벤치마크가 core 내부 함수에 기대지 않도록 따로 둔다.
+std::vector<Cell> bfs_route(const Map& map, Cell from, Cell to, Cell blocked) {
+    const int width = map.width();
+    auto index = [width](Cell c) { return static_cast<size_t>(c.y * width + c.x); };
+    std::vector<int> parent(static_cast<size_t>(width * map.height()), -2);
+    std::queue<Cell> frontier;
+    parent[index(from)] = -1;
+    frontier.push(from);
+    while (!frontier.empty()) {
+        Cell current = frontier.front();
+        frontier.pop();
+        if (current == to) break;
+        for (const Cell& next : map.neighbors(current)) {
+            if (next == current || next == blocked || parent[index(next)] != -2) continue;
+            parent[index(next)] = static_cast<int>(index(current));
+            frontier.push(next);
+        }
+    }
+    if (parent[index(to)] == -2) return {};
+    std::vector<Cell> route;
+    for (int i = static_cast<int>(index(to)); i != -1; i = parent[static_cast<size_t>(i)]) {
+        route.push_back(Cell{i % width, i / width});
+    }
+    std::reverse(route.begin(), route.end());
+    return route;
+}
+
+// standing 조건(23장): 경로 칸 chosen(= 어떤 로봇 W가 chosen.t에 들어갈 칸)에 chosen.t-1에 장애물이 생기면,
+// W가 장애물을 피해 가는 가장 짧은 우회로(W의 chosen.t-1 위치 → W의 목적지) 위에, 그 시각에 이미 자기
+// 목적지에 도착해 서 있는 다른 로봇 R의 칸이 있는가. 있으면 R의 id, 없으면 -1.
+int standing_robot_on_detour(const Map& map, const std::vector<Agent>& agents,
+                             const PlanResult& initial, int w_id, const SpaceTimeCell& chosen) {
+    const int t0 = chosen.t - 1;
+    const Agent* w = nullptr;
+    for (const Agent& agent : agents) {
+        if (agent.id == w_id) w = &agent;
+    }
+    Cell from = position_at(initial.at(w_id), t0);
+    std::vector<Cell> route = bfs_route(map, from, w->goal, Cell{chosen.x, chosen.y});
+    for (size_t i = 1; i < route.size(); ++i) {
+        for (const Agent& r : agents) {
+            if (r.id == w_id || !(r.goal == route[i])) continue;
+            if (arrival_time(initial.at(r.id)) <= t0) return r.id;
+        }
+    }
+    return -1;
+}
+
 // 장애물 1~3개를 고른다. 그중 정확히 하나는 collect_path_cells에서 뽑은
 // "실제로 어느 로봇이 그 시각에 지나가는 칸"이고, 나머지는 그냥 빈 칸 중
 // 무작위로 고른다(장애물이 여러 개 동시에 생기는 상황을 흉내내되, 적어도
@@ -304,10 +363,15 @@ std::vector<SpaceTimeCell> collect_path_cells(const PlanResult& initial,
 // 그 이유는 collect_path_cells의 주석과 같다. 이걸 빠뜨리면, A*가 도달
 // 불가능한 목적지를 향해 max_timestep까지 모든 경로를 다 헤매다 실패하는
 // 데 수 초가 걸리는 사례가 실제로 재현됐다(직접 디버깅으로 확인).
-std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& free_cells,
+//
+// standing 모드(23장): 주 장애물을 "막힌 로봇의 가장 짧은 우회로 위에 서 있는 로봇이 있는" 칸으로만 고른다.
+// 그런 칸이 없으면 빈 목록을 돌려준다 — 호출하는 쪽이 "아무도 안 막음"으로 보고 시나리오를 다시 뽑는다.
+std::vector<Cell> make_obstacles_that_actually_block(const Map& map,
+                                                       const std::vector<Cell>& free_cells,
                                                        const std::vector<Agent>& agents,
                                                        const PlanResult& initial,
-                                                       std::mt19937& rng, int* out_current_time) {
+                                                       std::mt19937& rng, int* out_current_time,
+                                                       ObstacleMode mode) {
     std::vector<Cell> all_goals;
     std::vector<Cell> all_starts;
     for (const Agent& agent : agents) {
@@ -353,7 +417,34 @@ std::vector<Cell> make_obstacles_that_actually_block(const std::vector<Cell>& fr
         }
     }
     int current_time = 0;
-    if (!path_cells.empty()) {
+    if (mode == ObstacleMode::kStanding) {
+        // 후보를 무작위 순서로 확인해서 처음 조건에 맞는 것을 쓴다(= 맞는 후보 중 균등하게 하나).
+        // 어느 로봇의 경로 칸인지 알아야 하므로, collect_path_cells 결과를 로봇별로 다시 찾는다.
+        std::vector<std::pair<int, SpaceTimeCell>> owned;
+        for (const SpaceTimeCell& cell : path_cells) {
+            for (const auto& [id, path] : initial) {
+                int index = cell.t - path.front().t;
+                if (index > 0 && static_cast<size_t>(index) < path.size() &&
+                    path[static_cast<size_t>(index)] == cell) {
+                    owned.emplace_back(id, cell);
+                }
+            }
+        }
+        std::shuffle(owned.begin(), owned.end(), rng);
+        bool found = false;
+        for (const auto& [w_id, cell] : owned) {
+            if (standing_robot_on_detour(map, agents, initial, w_id, cell) >= 0) {
+                blocking_cell = Cell{cell.x, cell.y};
+                current_time = cell.t - 1;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            *out_current_time = 0;
+            return {};
+        }
+    } else if (!path_cells.empty()) {
         std::uniform_int_distribution<size_t> idx_dist(0, path_cells.size() - 1); // 실제 겹치는 점 중 장애물 하나를 균등한 확률로 뽑음.
         const SpaceTimeCell& chosen = path_cells[idx_dist(rng)];
         blocking_cell = Cell{chosen.x, chosen.y};
@@ -431,6 +522,10 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
     result.plan_ok = true;
     result.initial_soc = sum_of_costs(initial);
     result.current_time = current_time;
+    result.moving_at_t = 0;
+    for (const auto& [id, path] : initial) {
+        if (arrival_time(path) > current_time) ++result.moving_at_t;
+    }
 
     // 근무표(17장). 처음 계획의 결과이므로 schedule_from_plan으로 읽는다. 21장 5-2부터 두 방법 모두
     // 근무표 버전 replan/full_replan을 부른다 — 예전 버전은 작업 시간이 전부 0일 때만 쓸 수 있다.
@@ -505,7 +600,7 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
                                               const ReplanConfig& replan_config,
                                               const AStarConfig& astar_config,
                                               std::mt19937& service_rng, int service_lo,
-                                              int service_hi) {
+                                              int service_hi, ObstacleMode obstacle_mode) {
     constexpr int kMaxAttempts = 200;
 
     std::vector<Cell> free_cells = collect_free_cells(map); // 벽이 아닌 모든 Cell들을 수집
@@ -532,13 +627,15 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
         int current_time = 0;
         // 장애물을 1~3개를 추출
         std::vector<Cell> obstacles =
-            make_obstacles_that_actually_block(free_cells, agents, *initial, rng, &current_time);
+            make_obstacles_that_actually_block(map, free_cells, agents, *initial, rng, &current_time,
+                                               obstacle_mode);
 
         // 장애물이 실제로 누군가의 기존 경로를 막는지 직접 검증한다 —
         // make_obstacles_that_actually_block이 "경로 중간 칸"에서 골랐다는
         // 사실에만 의존하지 않고, replan()이 실제로 쓰는 판별 함수로 다시
         // 한 번 확인해서 검증 단계를 빠뜨리지 않는다.
-        if (!obstacles_actually_block_someone(agents, *initial, obstacles, current_time)) {
+        if (obstacles.empty() ||
+            !obstacles_actually_block_someone(agents, *initial, obstacles, current_time)) {
             if (attempt == kMaxAttempts) {
                 ScenarioResult failed;
                 failed.plan_ok = false;
@@ -573,6 +670,7 @@ struct Task {
     int service_lo{0};           // 작업 시간 분포 U[service_lo, service_hi](--service). hi가 0이면 끔.
     int service_hi{0};
     AStarConfig astar_config;    // 재계획 엔진의 A* 설정(--tie-break). 처음 계획에는 안 쓴다.
+    ObstacleMode obstacle_mode{ObstacleMode::kPath};  // --obstacle-mode(23장)
 };
 
 // 작업 하나를 처리해서 CSV 한 줄(개행 포함)을 문자열로 만들어 돌려준다.
@@ -588,7 +686,8 @@ std::string run_task(const Task& task) {
     ScenarioResult r = find_solvable_scenario_and_run(*task.map, task.num_agents, rng,
                                                       task.replan_config, task.astar_config,
                                                       service_rng,
-                                                      task.service_lo, task.service_hi);
+                                                      task.service_lo, task.service_hi,
+                                                      task.obstacle_mode);
 
     std::ostringstream out;
     out << task.map_name << "," << task.num_agents << "," << task.trial << ","
@@ -599,7 +698,7 @@ std::string run_task(const Task& task) {
         << r.selective_replan_changed << "," << r.selective_replanned << "," << r.selective_conflicts
         << "," << r.selective_yielded << "," << r.full_replan_away << "," << r.selective_away << ","
         << r.current_time << "," << r.working_at_t << "," << r.full_replan_delayed << ","
-        << r.selective_delayed << "," << r.selective_rescued << "\n";
+        << r.selective_delayed << "," << r.selective_rescued << "," << r.moving_at_t << "\n";
     return out.str();
 }
 
@@ -634,6 +733,10 @@ int main(int argc, char** argv) {
     // --tie-break R : 재계획 엔진의 A* 동점 규칙(21장 5-5). larger-g(기본) | smaller-g | random:SEED.
     //                 처음 계획은 기본 규칙 그대로라 시나리오는 같다.
     AStarConfig astar_config;
+    // --threads N : 동시에 돌릴 스레드 수(23장). 기본은 CPU 수. 시간을 깨끗하게 잴 때 1.
+    // --obstacle-mode M : path(기본, 지금까지와 같음) | standing(우회로에 서 있는 로봇이 있는 장면, 23장)
+    unsigned int requested_threads = 0;
+    ObstacleMode obstacle_mode = ObstacleMode::kPath;
     ReplanConfig replan_config;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -664,6 +767,23 @@ int main(int argc, char** argv) {
                 std::cerr << "--service needs 0 <= LO <= HI\n";
                 return 1;
             }
+        } else if (arg == "--threads" && i + 1 < argc) {
+            int value = std::atoi(argv[++i]);
+            if (value < 1) {
+                std::cerr << "--threads must be >= 1\n";
+                return 1;
+            }
+            requested_threads = static_cast<unsigned int>(value);
+        } else if (arg == "--obstacle-mode" && i + 1 < argc) {
+            std::string value = argv[++i];
+            if (value == "path") {
+                obstacle_mode = ObstacleMode::kPath;
+            } else if (value == "standing") {
+                obstacle_mode = ObstacleMode::kStanding;
+            } else {
+                std::cerr << "--obstacle-mode must be path or standing\n";
+                return 1;
+            }
         } else if (arg == "--tie-break" && i + 1 < argc) {
             std::string value = argv[++i];
             if (value == "larger-g") {
@@ -691,7 +811,7 @@ int main(int argc, char** argv) {
             }
         } else {
             std::cerr << "usage: run_benchmark [--large] [--repeats N] [--tiers K] "
-                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED]\n";
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing]\n";
             return 1;
         }
     }
@@ -730,7 +850,7 @@ int main(int argc, char** argv) {
                 uint32_t seed = kBaseSeed + static_cast<uint32_t>(tasks.size());
                 tasks.push_back(
                     Task{&named_map.map, named_map.name, num_agents, trial, seed, replan_config,
-                         service_lo, service_hi, astar_config});
+                         service_lo, service_hi, astar_config, obstacle_mode});
             }
         }
     }
@@ -744,6 +864,7 @@ int main(int argc, char** argv) {
     // thread 설정
     unsigned int num_threads = std::thread::hardware_concurrency(); // PC가 쓸 수 있느 thread 갯수를 return
     if (num_threads == 0) num_threads = 4;  // hardware_concurrency가 알 수 없다고 보고하면 4로 폴백.
+    if (requested_threads > 0) num_threads = requested_threads;
     num_threads = std::min<unsigned int>(num_threads, static_cast<unsigned int>(tasks.size())); // thread 자원낭비를 방지 (ex. task가 8개인데 thread가 16개 일 때, thread를 8개만 사용)
 
     std::cerr << "[note] running " << tasks.size() << " trials on " << num_threads
@@ -765,7 +886,7 @@ int main(int argc, char** argv) {
                  "selective_replan_ok,selective_replan_ms,escalation_tier,initial_soc,"
                  "full_replan_soc,full_replan_changed,selective_replan_soc,"
                  "selective_replan_changed,selective_replanned,selective_conflicts,selective_yielded,full_replan_away,selective_away,"
-                 "current_time,working_at_t,full_replan_delayed,selective_delayed,selective_rescued\n";
+                 "current_time,working_at_t,full_replan_delayed,selective_delayed,selective_rescued,moving_at_t\n";
     for (const std::string& line : results) std::cout << line;
 
     return 0;
