@@ -65,7 +65,10 @@ struct ScenarioResult {
     int escalation_tier{0};  // selective_replan_ok일 때만 의미 있음
     int plan_attempts{1};    // 이 trial을 채우기 위해 plan()을 몇 번 시도했는지
     int plan_failures{0};    // 그중 처음 PP 계획(plan())이 실패해서 버린 횟수
-    int obstacle_retries{0}; // 그중 계획은 됐지만 장애물이 아무도 안 막아서(standing: 조건 맞는 로봇 없음) 버린 횟수
+    int obstacle_retries{0};
+    int affected_n{0};       // 장애물과 경로가 겹친 로봇 수(우리 Tier 0 대상, 6번 Park식 비교용)
+    int hit_offset_max{0};
+    int selective_events{0}; // 방법 B가 replan()을 부른 횟수(--affected-window일 때 미룬 로봇마다 늘어남, 아니면 1)   // 그 로봇들이 장애물 칸에 처음 닿는 시각 - 지금 시각, 의 최댓값(스텝) // 그중 계획은 됐지만 장애물이 아무도 안 막아서(standing: 조건 맞는 로봇 없음) 버린 횟수
 
     // 경로 품질(12장). 방법이 실패했으면 -1.
     int initial_soc{-1};               // 초기 계획의 경로 비용 합(도착 시각의 합)
@@ -528,6 +531,18 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
     for (const auto& [id, path] : initial) {
         if (arrival_time(path) > current_time) ++result.moving_at_t;
     }
+    // 6번 Park식 비교(26·27장): 영향받은 로봇이 장애물에 "얼마나 뒤에" 닿는지. path_hits_obstacle과 같은 범위를 본다.
+    for (const auto& [id, path] : initial) {
+        const int check_until = std::max(path.back().t, current_time);
+        for (int t = current_time; t <= check_until; ++t) {
+            const Cell here = position_at(path, t);
+            if (std::find(obstacles.begin(), obstacles.end(), here) != obstacles.end()) {
+                ++result.affected_n;
+                result.hit_offset_max = std::max(result.hit_offset_max, t - current_time);
+                break;
+            }
+        }
+    }
 
     // 근무표(17장). 처음 계획의 결과이므로 schedule_from_plan으로 읽는다. 21장 5-2부터 두 방법 모두
     // 근무표 버전 replan/full_replan을 부른다 — 예전 버전은 작업 시간이 전부 0일 때만 쓸 수 있다.
@@ -562,7 +577,11 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
     {
         PrioritizedPlanner planner_b(map, astar_config, replan_config);
         auto t0 = std::chrono::steady_clock::now();
-        std::optional<ReplanResult> selective = planner_b.replan(agents, initial, schedule, obstacles, current_time);
+        // --affected-window(6번 Park식)이면 미룬 로봇이 창에 들어올 때마다 다시 부르는 replan_windowed. 계산 시간은 합.
+        std::optional<ReplanResult> selective =
+            replan_config.affected_window >= 0
+                ? planner_b.replan_windowed(agents, initial, schedule, obstacles, current_time)
+                : planner_b.replan(agents, initial, schedule, obstacles, current_time);
         result.selective_replan_ms = elapsed_ms(t0);
         result.selective_replan_ok = selective.has_value();
         if (selective.has_value()) {
@@ -575,6 +594,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
             result.selective_away = count_away(agents, selective->paths, current_time);
             result.selective_delayed = count_delayed(initial, selective->paths);
             result.selective_rescued = static_cast<int>(selective->rescued_ids.size());
+            result.selective_events = selective->event_times.empty() ? 1 : static_cast<int>(selective->event_times.size());
         }
     }
 
@@ -717,7 +737,7 @@ std::string run_task(const Task& task) {
         << "," << r.selective_yielded << "," << r.full_replan_away << "," << r.selective_away << ","
         << r.current_time << "," << r.working_at_t << "," << r.full_replan_delayed << ","
         << r.selective_delayed << "," << r.selective_rescued << "," << r.moving_at_t << "," << r.plan_failures << ","
-        << r.obstacle_retries << "\n";
+        << r.obstacle_retries << "," << r.affected_n << "," << r.hit_offset_max << "," << r.selective_events << "\n";
     return out.str();
 }
 
@@ -830,6 +850,9 @@ int main(int argc, char** argv) {
                 std::cerr << "--tie-break must be larger-g, smaller-g or random:SEED\n";
                 return 1;
             }
+        } else if (arg == "--affected-window" && i + 1 < argc) {
+            // 6번 Park식(27장 P1): 지금부터 W스텝 안에 장애물에 닿는 로봇만 지금 다시 계획, 나머지는 창에 들어올 때.
+            replan_config.affected_window = std::atoi(argv[++i]);
         } else if (arg == "--yield-min-delay" && i + 1 < argc) {
             replan_config.yield_min_delay = std::atoi(argv[++i]);
         } else if (arg == "--rescue" && i + 1 < argc) {
@@ -844,7 +867,7 @@ int main(int argc, char** argv) {
             }
         } else {
             std::cerr << "usage: run_benchmark [--large | --huge] [--agents a,b,c] [--max-timestep N] [--repeats N] [--tiers K] "
-                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing]\n";
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing] [--affected-window W]\n";
             return 1;
         }
     }
@@ -926,7 +949,7 @@ int main(int argc, char** argv) {
                  "full_replan_soc,full_replan_changed,selective_replan_soc,"
                  "selective_replan_changed,selective_replanned,selective_conflicts,selective_yielded,full_replan_away,selective_away,"
                  "current_time,working_at_t,full_replan_delayed,selective_delayed,selective_rescued,moving_at_t,"
-                 "plan_failures,obstacle_retries\n";
+                 "plan_failures,obstacle_retries,affected_n,hit_offset_max,selective_events\n";
     for (const std::string& line : results) std::cout << line;
 
     return 0;

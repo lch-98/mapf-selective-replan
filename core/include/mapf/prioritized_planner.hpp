@@ -83,6 +83,13 @@ struct ReplanConfig {
     // request_yield일 때, 가장 빠른 도착보다 이 스텝 수 이상 늦어진 로봇이 있을 때만 시도한다. 한 번 더
     // 계획하는 데 시간이 들므로, 조금 늦은 경우는 건너뛰어 시간을 아낀다. 1이면 조금이라도 늦으면 시도.
     int yield_min_delay{1};
+
+    // 6번 비교 기준 "Park식"(Park 외 2026, 27장 P1): 0 이상이면 Tier 0에서 "지금부터 affected_window 스텝
+    // 안에 장애물 칸에 닿는 로봇"만 다시 계획한다. 더 늦게 닿는 로봇은 "미룬 로봇"(ReplanResult::deferred_ids)이
+    // 되어 옛 경로를 그대로 두고, 장부에는 장애물에 닿기 바로 전 시각까지만 적는다(그 뒤는 아직 정해지지 않았으므로).
+    // 미룬 로봇은 창 안에 들어올 때 다시 계획한다 — replan_windowed()가 그 시각마다 replan()을 다시 부른다.
+    // -1(기본)이면 끔: 경로가 장애물과 겹치는 로봇을 전부 지금 다시 계획한다(원래 동작 그대로).
+    int affected_window{-1};
 };
 
 // replan() 한 번의 결과 — 최종 경로 외에, "얼마나 선택적으로 풀렸는지"를
@@ -94,6 +101,8 @@ struct ReplanResult {
     std::vector<int> rescued_ids{};    // Tier 1+에서 새로 추가된 "구조 로봇" id 목록
     TaskSchedule schedule{};           // 재계획 후의 근무표(17장 결정 9, update_schedule로 계산)
     std::vector<int> yielded_ids{};    // 비켜 달라고 해서 결과에 쓰인 로봇 id(19장, request_yield일 때만)
+    std::vector<int> deferred_ids{};   // affected_window 때문에 이번에 미룬 로봇 id(옛 경로가 아직 장애물을 밟음)
+    std::vector<int> event_times{};    // replan_windowed()에서 replan()을 부른 시각들(첫 값 = current_time)
 };
 
 class PrioritizedPlanner {
@@ -152,6 +161,21 @@ public:
     //
     // 작업 중인 로봇은 여기서도 작업이 끝날 때까지 움직이지 않는다. 재계획 후 근무표는
     // update_schedule(agents, previous_schedule, 결과, current_time)로 만든다.
+    // affected_window를 쓸 때의 재계획(6번 Park식): current_time에 replan()을 부르고, 미룬 로봇이 남아 있으면
+    // 그중 가장 먼저 창에 들어오는 시각(장애물에 닿는 시각 - affected_window)으로 옮겨 다시 replan()을 부른다.
+    // 미룬 로봇이 없어질 때까지 반복한다. 결과의 replanned_ids는 모든 회차의 합, escalation_tier는 한 번이라도
+    // 안전망을 썼으면 -1, 아니면 회차 중 가장 큰 값, event_times는 부른 시각들. affected_window < 0이면 replan()과 같다.
+    std::optional<ReplanResult> replan_windowed(const std::vector<Agent>& agents,
+                                                const PlanResult& previous_paths,
+                                                const TaskSchedule& previous_schedule,
+                                                const std::vector<Cell>& new_obstacles,
+                                                int current_time);
+
+    // path가 current_time 이후 처음으로 new_obstacles 중 한 칸에 서는 시각. 없으면 nullopt.
+    // path_hits_obstacle과 같은 범위(도착 후 머무는 시각 포함)를 본다.
+    static std::optional<int> first_hit_time(const Path& path, const std::vector<Cell>& new_obstacles,
+                                             int current_time);
+
     std::optional<PlanResult> full_replan(const std::vector<Agent>& agents,
                                           const PlanResult& previous_paths,
                                           const TaskSchedule& previous_schedule,
@@ -193,6 +217,8 @@ private:
     // 자체가 거짓이 된다 — 즉 실제로는 풀 수 없는 충돌이다. 이 경우 false를
     // 반환하고, plan()은 전체를 실패로 처리한다.
     bool register_path(int agent_id, const Path& path);
+    // 미룬 로봇(affected_window)의 옛 경로를 until_t 전 시각까지만 등록한다(꼬리 예약 없음).
+    bool register_path_prefix(int agent_id, const Path& path, int until_t);
 
     // current_time 시점에 agent_id가 있던 칸. path가 current_time보다
     // 짧으면(=이미 도착해서 Tail 상태) 목적지 칸을 반환한다(06장 6.4절).
@@ -281,6 +307,8 @@ private:
     // unordered_map은 원소를 더해도 기존 원소의 참조가 그대로라 shortest_route가 참조를 돌려줘도 안전하다.
     mutable std::unordered_map<std::uint64_t, std::vector<Cell>> route_memo_;
     mutable int route_computations_{0};
+    // replan() 한 번 동안의 미룬 로봇: id → 장애물에 처음 닿는 시각(affected_window, 6번 Park식).
+    std::unordered_map<int, int> deferred_hit_;
 };
 
 }  // namespace mapf

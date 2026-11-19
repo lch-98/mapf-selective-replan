@@ -140,6 +140,9 @@ class ReplanConfig:
     """기본값 False. 크게 돌아가게 됐으면 서 있는 로봇에게 비켜 달라고 한 번 더 시도(19장)."""
     yield_min_delay: int
     """기본값 1. 가장 빠른 도착보다 이만큼 이상 늦은 로봇이 있을 때만 비켜 달라고 한다."""
+    affected_window: int
+    """기본값 -1(끔). 0 이상이면 6번 비교 기준 Park식: 지금부터 이 스텝 안에 장애물에 닿는 로봇만 지금 다시
+    계획하고, 더 늦게 닿는 로봇은 미룬다(ReplanResult.deferred_ids). replan_windowed()가 창에 들어올 때 다시 계획한다."""
 
     def __init__(self) -> None: ...
 
@@ -213,6 +216,12 @@ class ReplanResult:
 
     yielded_ids: List[int]
     """비켜 달라고 해서 결과에 쓰인 로봇 id(19장, ReplanConfig.request_yield를 켰을 때만)."""
+
+    deferred_ids: List[int]
+    """ReplanConfig.affected_window 때문에 이번에 미룬 로봇 id. 옛 경로가 아직 장애물을 밟는다."""
+
+    event_times: List[int]
+    """replan_windowed()에서 replan()을 부른 시각들(첫 값 = current_time). replan()에서는 빈 리스트."""
 
 class PrioritizedPlanner:
     """고정 우선순위 계획(Prioritized Planning, PP). 우선순위는 agents 리스트의 순서
@@ -291,6 +300,26 @@ class PrioritizedPlanner:
         시점 위치를 새 출발점으로 삼아 처음부터 다시 계획한다(이미 지나온
         길은 보존). 선택적 재계획과 공정하게 비교할 "베이스라인"으로 쓴다.
         예전 버전이라 service_time이 있는 로봇이 있으면 ValueError."""
+        ...
+
+    def replan_windowed(
+        self,
+        agents: List[Agent],
+        previous_paths: PlanResult,
+        previous_schedule: TaskSchedule,
+        new_obstacles: List[Cell],
+        current_time: int,
+    ) -> Optional[ReplanResult]:
+        """6번 Park식(affected_window). current_time에 replan()을 부르고, 미룬 로봇이 남으면 그중 가장 먼저
+        창에 들어오는 시각(장애물에 닿는 시각 - affected_window)에 다시 부른다. 미룬 로봇이 없어질 때까지.
+        replanned_ids는 모든 회차의 합, escalation_tier는 한 번이라도 안전망이면 -1, event_times는 부른 시각들."""
+        ...
+
+    @staticmethod
+    def first_hit_time(
+        path: Path, new_obstacles: List[Cell], current_time: int
+    ) -> Optional[int]:
+        """path가 current_time 이후 처음으로 new_obstacles 중 한 칸에 서는 시각. 없으면 None."""
         ...
 
     @staticmethod

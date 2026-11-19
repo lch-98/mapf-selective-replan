@@ -230,6 +230,40 @@ Cell PrioritizedPlanner::position_at(const Path& path, int current_time) {
     return Cell{path[static_cast<size_t>(index)].x, path[static_cast<size_t>(index)].y};
 }
 
+std::optional<int> PrioritizedPlanner::first_hit_time(const Path& path,
+                                                     const std::vector<Cell>& new_obstacles,
+                                                     int current_time) {
+    int check_until = std::max(path.back().t, current_time);
+    for (int t = current_time; t <= check_until; ++t) {
+        Cell here = position_at(path, t);
+        for (const Cell& obstacle : new_obstacles) {
+            if (here == obstacle) return t;
+        }
+    }
+    return std::nullopt;
+}
+
+bool PrioritizedPlanner::register_path_prefix(int agent_id, const Path& path, int until_t) {
+    // register_path와 같은 규칙으로 칸·이동을 적되, until_t 전 시각까지만 적고 꼬리 예약은 하지 않는다.
+    // 장부는 마지막으로 적은 시각까지만 바뀐다(18장 장부 굳는 시각).
+    int last_t = path.front().t;
+    for (const SpaceTimeCell& cell : path) {
+        if (cell.t < until_t) last_t = cell.t;
+    }
+    table_.mark_settled_from(last_t);
+    for (size_t i = 0; i < path.size(); ++i) {
+        const SpaceTimeCell& cell = path[i];
+        if (cell.t >= until_t) break;
+        if (!table_.reserve_if_unowned(cell.x, cell.y, cell.t, agent_id)) return false;
+        if (i + 1 < path.size() && path[i + 1].t < until_t) {
+            const SpaceTimeCell& next = path[i + 1];
+            if (table_.is_edge_occupied(cell.x, cell.y, next.x, next.y, cell.t)) return false;
+            table_.reserve_edge(cell.x, cell.y, next.x, next.y, cell.t);
+        }
+    }
+    return true;
+}
+
 bool PrioritizedPlanner::path_hits_obstacle(const Path& path, const std::vector<Cell>& new_obstacles,
                               int current_time) {
     // current_time 이후 시점만 본다 — 이미 지나간 과거는 다시 계획해도
@@ -418,7 +452,13 @@ std::optional<PlanResult> PrioritizedPlanner::try_replan_set(const std::vector<A
             // 이 거절이 원리상 생기지 않는다. previous_paths끼리 이미 충돌하는 잘못된
             // 입력일 때만 생기며, 그때도 같은 방식으로 그 로봇을 불러온다.)
             const Path& old_path = previous_paths.at(agent.id);
-            if (!register_path(agent.id, old_path)) {
+            // 미룬 로봇(affected_window, 6번 Park식): 장애물에 닿기 전까지만 적는다. 결과에는 옛 경로를 그대로
+            // 둬서, 다음 회차(replan_windowed)에서 다시 "영향받은 로봇"으로 잡히게 한다.
+            auto deferred = deferred_hit_.find(agent.id);
+            bool registered = deferred != deferred_hit_.end()
+                                  ? register_path_prefix(agent.id, old_path, deferred->second)
+                                  : register_path(agent.id, old_path);
+            if (!registered) {
                 if (out_blocked_owner != nullptr) *out_blocked_owner = agent.id;
                 return std::nullopt;
             }
@@ -588,12 +628,20 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
     // 22장 메모장은 이 재계획 한 번 동안만 쓴다. 지난 재계획의 길은 새 장애물이 달랐을 수 있으므로 버린다.
     route_memo_.clear();
     route_computations_ = 0;
+    deferred_hit_.clear();
 
     // 1단계: 영향받는 로봇 판별 (06장 6.4절).
     std::vector<int> working_ids;
     for (const Agent& agent : agents) {
         const Path& old_path = previous_paths.at(agent.id);
-        if (path_hits_obstacle(old_path, new_obstacles, current_time)) {
+        std::optional<int> hit = first_hit_time(old_path, new_obstacles, current_time);
+        if (hit.has_value()) {
+            // 6번 Park식: 창 밖에서 닿는 로봇은 지금 다시 계획하지 않고 미룬다.
+            if (replan_config_.affected_window >= 0 &&
+                *hit > current_time + replan_config_.affected_window) {
+                deferred_hit_[agent.id] = *hit;
+                continue;
+            }
             working_ids.push_back(agent.id);
 
             // 도달성 검사(13장): 다른 로봇이 하나도 없어도 이 로봇이 목적지에 못 간다면
@@ -616,11 +664,22 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
     }
 
     // 영향받은 로봇이 아무도 없으면 기존 경로 그대로 끝낸다.
+    // 미룬 로봇 id(구조 로봇으로 불려 working이 되면 빠진다). 결과마다 채운다.
+    auto deferred_list = [this](const std::vector<int>& working) {
+        std::vector<int> out;
+        for (const auto& [id, hit] : deferred_hit_) {
+            if (std::find(working.begin(), working.end(), id) == working.end()) out.push_back(id);
+        }
+        std::sort(out.begin(), out.end());
+        return out;
+    };
+
     if (working_ids.empty()) {
         ReplanResult result;
         result.paths = previous_paths;
         result.schedule = previous_schedule;
         result.escalation_tier = 0;
+        result.deferred_ids = deferred_list(working_ids);
         return result;
     }
 
@@ -646,6 +705,7 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
             result.rescued_ids = rescued_ids;
             result.schedule =
                 update_schedule(agents, previous_schedule, result.paths, current_time);
+            result.deferred_ids = deferred_list(working_ids);
             return result;
         }
 
@@ -693,6 +753,56 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
     for (const Agent& agent : agents) result.replanned_ids.push_back(agent.id);
     result.escalation_tier = -1;
     result.schedule = update_schedule(agents, previous_schedule, result.paths, current_time);
+    return result;
+}
+
+std::optional<ReplanResult> PrioritizedPlanner::replan_windowed(const std::vector<Agent>& agents,
+                                                                const PlanResult& previous_paths,
+                                                                const TaskSchedule& previous_schedule,
+                                                                const std::vector<Cell>& new_obstacles,
+                                                                int current_time) {
+    PlanResult paths = previous_paths;
+    TaskSchedule schedule = previous_schedule;
+    std::vector<int> replanned;
+    std::vector<int> rescued;
+    std::vector<int> event_times;
+    int worst_tier = 0;
+    int t = current_time;
+    while (true) {
+        std::optional<ReplanResult> step = replan(agents, paths, schedule, new_obstacles, t);
+        if (!step.has_value()) return std::nullopt;
+        event_times.push_back(t);
+        for (int id : step->replanned_ids) {
+            if (std::find(replanned.begin(), replanned.end(), id) == replanned.end()) replanned.push_back(id);
+        }
+        for (int id : step->rescued_ids) rescued.push_back(id);
+        if (step->escalation_tier == -1 || worst_tier == -1) {
+            worst_tier = -1;
+        } else {
+            worst_tier = std::max(worst_tier, step->escalation_tier);
+        }
+        paths = std::move(step->paths);
+        schedule = std::move(step->schedule);
+        if (step->deferred_ids.empty() || replan_config_.affected_window < 0) break;
+
+        // 다음 회차: 미룬 로봇 중 가장 먼저 창에 들어오는 시각. 미룬 로봇은 hit > t + window이므로 반드시 t보다 크다.
+        int next_t = -1;
+        for (int id : step->deferred_ids) {
+            std::optional<int> hit = first_hit_time(paths.at(id), new_obstacles, t);
+            if (!hit.has_value()) continue;
+            int enter = *hit - replan_config_.affected_window;
+            if (next_t < 0 || enter < next_t) next_t = enter;
+        }
+        if (next_t < 0) break;
+        t = std::max(t + 1, next_t);
+    }
+    ReplanResult result;
+    result.paths = std::move(paths);
+    result.schedule = std::move(schedule);
+    result.replanned_ids = std::move(replanned);
+    result.rescued_ids = std::move(rescued);
+    result.escalation_tier = worst_tier;
+    result.event_times = std::move(event_times);
     return result;
 }
 

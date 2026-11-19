@@ -130,6 +130,7 @@ PYBIND11_MODULE(mapf_py, m) {
         .def_readwrite("rescue_selection", &ReplanConfig::rescue_selection)
         .def_readwrite("request_yield", &ReplanConfig::request_yield)
         .def_readwrite("yield_min_delay", &ReplanConfig::yield_min_delay)
+        .def_readwrite("affected_window", &ReplanConfig::affected_window)
         .def("__repr__", [](const ReplanConfig& c) {
             return std::string("ReplanConfig(max_escalation_tiers=") +
                    std::to_string(c.max_escalation_tiers) + ", order=" +
@@ -140,7 +141,8 @@ PYBIND11_MODULE(mapf_py, m) {
                         ? "SHORTEST_PATH_CONFLICTS"
                         : "BLOCKED_CELLS") +
                    ", request_yield=" + (c.request_yield ? "True" : "False") +
-                   ", yield_min_delay=" + std::to_string(c.yield_min_delay) + ")";
+                   ", yield_min_delay=" + std::to_string(c.yield_min_delay) +
+                   ", affected_window=" + std::to_string(c.affected_window) + ")";
         });
 
     // ── 근무표 (TaskWindow, TaskState, 근무표 함수) ───────────────
@@ -178,7 +180,9 @@ PYBIND11_MODULE(mapf_py, m) {
         .def_readonly("escalation_tier", &ReplanResult::escalation_tier)
         .def_readonly("rescued_ids", &ReplanResult::rescued_ids)
         .def_readonly("schedule", &ReplanResult::schedule)
-        .def_readonly("yielded_ids", &ReplanResult::yielded_ids);
+        .def_readonly("yielded_ids", &ReplanResult::yielded_ids)
+        .def_readonly("deferred_ids", &ReplanResult::deferred_ids)
+        .def_readonly("event_times", &ReplanResult::event_times);
 
     // ── PrioritizedPlanner ─────────────────────────────────────────────────────
     // PrioritizedPlanner는 생성자 인자로 받은 const Map&를 멤버로 그대로 저장한다(복사가
@@ -214,6 +218,12 @@ PYBIND11_MODULE(mapf_py, m) {
                                const std::vector<Cell>&, int>(&PrioritizedPlanner::full_replan),
              py::arg("agents"), py::arg("previous_paths"), py::arg("previous_schedule"),
              py::arg("new_obstacles"), py::arg("current_time"))
+        // 6번 Park식(27장 P1): affected_window를 쓸 때 미룬 로봇이 창에 들어올 때마다 replan을 다시 부른다.
+        .def("replan_windowed", &PrioritizedPlanner::replan_windowed, py::arg("agents"),
+             py::arg("previous_paths"), py::arg("previous_schedule"), py::arg("new_obstacles"),
+             py::arg("current_time"))
         .def_static("path_hits_obstacle", &PrioritizedPlanner::path_hits_obstacle, py::arg("path"),
+                    py::arg("new_obstacles"), py::arg("current_time"))
+        .def_static("first_hit_time", &PrioritizedPlanner::first_hit_time, py::arg("path"),
                     py::arg("new_obstacles"), py::arg("current_time"));
 }

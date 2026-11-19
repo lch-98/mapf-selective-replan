@@ -1250,3 +1250,122 @@ TEST(SelectiveReplanTest, RouteMemoIsClearedForEachReplan) {
     EXPECT_EQ(second->paths.at(0).back(), (SpaceTimeCell{4, 1, 6}));
     EXPECT_EQ(planner.last_route_computations(), 1);
 }
+
+// ───────────────────────────────────────────────────────────────
+// 6번 비교 기준 Park식(27장 P1): affected_window — 창 밖에서 장애물에 닿는 로봇은 미루고, 창에 들어올 때 다시 계획.
+// ───────────────────────────────────────────────────────────────
+
+namespace {
+
+// 가로로 쉬지 않고 가는 경로: (x0, y)에서 t=0에 출발해 x1까지.
+Path straight_row(int x0, int x1, int y) {
+    Path path;
+    int step = x1 >= x0 ? 1 : -1;
+    int t = 0;
+    for (int x = x0;; x += step, ++t) {
+        path.push_back(SpaceTimeCell{x, y, t});
+        if (x == x1) break;
+    }
+    return path;
+}
+
+// current_time 이후 어떤 로봇도 obstacles 칸에 서지 않는지(도착 후 머묾 포함).
+void expect_avoids_obstacles(const PlanResult& paths, const std::vector<Cell>& obstacles, int current_time) {
+    for (const auto& [id, path] : paths) {
+        for (const SpaceTimeCell& c : path) {
+            if (c.t < current_time) continue;
+            for (const Cell& o : obstacles) {
+                EXPECT_FALSE(c.x == o.x && c.y == o.y) << "agent " << id << " on obstacle at t" << c.t;
+            }
+        }
+        const SpaceTimeCell& last = path.back();
+        for (const Cell& o : obstacles) {
+            EXPECT_FALSE(last.x == o.x && last.y == o.y) << "agent " << id << " parks on obstacle";
+        }
+    }
+}
+
+}  // namespace
+
+TEST(SelectiveReplanTest, AffectedWindowDefersLateRobotAndKeepsItsPath) {
+    // 8×3 빈 지도. A(0)는 1번 줄을 따라 t6에 장애물 (6,1)에 닿는다. C(1)는 0번 줄에서 t2에 장애물 (2,0)에 닿는다.
+    // 창 W=3, 지금 t0: C(2 ≤ 3)만 지금 다시 계획하고 A(6 > 3)는 미룬다. A의 옛 경로는 장애물 칸을 밟지만
+    // 장부에는 t5까지만 적히므로(등록 거절 없음) 안전망 없이 Tier 0에서 끝나야 한다.
+    Map map(8, 3);
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 1}, Cell{7, 1}},
+        Agent{1, Cell{0, 0}, Cell{7, 0}},
+    };
+    PlanResult previous;
+    previous[0] = straight_row(0, 7, 1);
+    previous[1] = straight_row(0, 7, 0);
+    const std::vector<Cell> obstacles = {Cell{6, 1}, Cell{2, 0}};
+
+    ReplanConfig config;
+    config.order = ReplanOrder::kFixedFirst;
+    config.max_escalation_tiers = 0;
+    config.affected_window = 3;
+    PrioritizedPlanner planner(map, AStarConfig{}, config);
+    auto result = planner.replan(agents, previous, obstacles, /*current_time=*/0);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->escalation_tier, 0);
+    EXPECT_EQ(result->replanned_ids, std::vector<int>{1});
+    EXPECT_EQ(result->deferred_ids, std::vector<int>{0});
+    EXPECT_EQ(result->paths.at(0), previous.at(0));  // 미룬 로봇은 아직 옛 경로 그대로
+}
+
+TEST(SelectiveReplanTest, ReplanWindowedReplansDeferredRobotWhenItEntersTheWindow) {
+    // 위와 같은 장면을 replan_windowed로: t0에 C, A가 창에 들어오는 t3(= 6 - 3)에 A를 다시 계획한다.
+    // 끝나면 아무도 장애물을 밟지 않고, 서로 부딪히지 않고, 미룬 로봇이 남지 않는다.
+    Map map(8, 3);
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 1}, Cell{7, 1}},
+        Agent{1, Cell{0, 0}, Cell{7, 0}},
+    };
+    PlanResult previous;
+    previous[0] = straight_row(0, 7, 1);
+    previous[1] = straight_row(0, 7, 0);
+    const std::vector<Cell> obstacles = {Cell{6, 1}, Cell{2, 0}};
+
+    ReplanConfig config;
+    config.order = ReplanOrder::kFixedFirst;
+    config.max_escalation_tiers = 0;
+    config.affected_window = 3;
+    PrioritizedPlanner planner(map, AStarConfig{}, config);
+    auto result = planner.replan_windowed(agents, previous, schedule_from_plan(agents, previous), obstacles, 0);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->event_times, (std::vector<int>{0, 3}));
+    EXPECT_EQ(result->escalation_tier, 0);
+    EXPECT_EQ(result->replanned_ids, (std::vector<int>{1, 0}));
+    EXPECT_TRUE(result->deferred_ids.empty());
+    // A는 t3까지 옛 경로 그대로 움직였어야 한다(과거는 못 바꾼다).
+    for (int t = 0; t <= 3; ++t) EXPECT_EQ(result->paths.at(0)[t], previous.at(0)[t]);
+    expect_conflict_free(result->paths);
+    expect_avoids_obstacles(result->paths, obstacles, 0);
+}
+
+TEST(SelectiveReplanTest, AffectedWindowOffMeansEveryHitRobotNow) {
+    // affected_window = -1(기본): 늦게 닿는 로봇도 지금 다시 계획하고, replan_windowed는 replan을 한 번만 부른다.
+    Map map(8, 3);
+    std::vector<Agent> agents = {
+        Agent{0, Cell{0, 1}, Cell{7, 1}},
+        Agent{1, Cell{0, 0}, Cell{7, 0}},
+    };
+    PlanResult previous;
+    previous[0] = straight_row(0, 7, 1);
+    previous[1] = straight_row(0, 7, 0);
+    const std::vector<Cell> obstacles = {Cell{6, 1}, Cell{2, 0}};
+
+    ReplanConfig config;
+    config.order = ReplanOrder::kFixedFirst;
+    PrioritizedPlanner planner(map, AStarConfig{}, config);
+    auto result = planner.replan_windowed(agents, previous, schedule_from_plan(agents, previous), obstacles, 0);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->event_times, std::vector<int>{0});
+    EXPECT_EQ(result->replanned_ids, (std::vector<int>{0, 1}));
+    EXPECT_TRUE(result->deferred_ids.empty());
+    expect_avoids_obstacles(result->paths, obstacles, 0);
+}

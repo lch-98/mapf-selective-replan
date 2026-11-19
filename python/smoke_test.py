@@ -192,6 +192,27 @@ def main() -> None:
     check(w_arrival(ours(True)) == (ST(6, 2, 8), [1]), "request_yield 켬: P가 비켜 W는 t8")
     check(w_arrival(ours(True, 5)) == (ST(6, 2, 12), []), "yield_min_delay=5: 4 늦은 건 건너뜀(t12)")
 
+    print("[10] 6번 Park식 affected_window: 창 밖 로봇은 미루고, 창에 들어올 때 다시 계획")
+    # C++ ReplanWindowedReplansDeferredRobotWhenItEntersTheWindow와 같은 장면.
+    park_map = mapf_py.Map(8, 3)
+    pa = [mapf_py.Agent(0, C(0, 1), C(7, 1)), mapf_py.Agent(1, C(0, 0), C(7, 0))]
+    pa_prev = {0: [ST(x, 1, x) for x in range(8)], 1: [ST(x, 0, x) for x in range(8)]}
+    pa_obs = [C(6, 1), C(2, 0)]
+    pc = mapf_py.ReplanConfig()
+    pc.order = mapf_py.ReplanOrder.FIXED_FIRST
+    pc.max_escalation_tiers = 0
+    pc.affected_window = 3
+    check("affected_window=3" in repr(pc), "affected_window가 repr에 보임")
+    pp = mapf_py.PrioritizedPlanner(park_map, replan_config=pc)
+    one = pp.replan(pa, pa_prev, mapf_py.schedule_from_plan(pa, pa_prev), pa_obs, 0)
+    check(list(one.deferred_ids) == [0] and list(one.replanned_ids) == [1], "replan: A는 미루고 C만 다시")
+    check(mapf_py.PrioritizedPlanner.first_hit_time(pa_prev[0], pa_obs, 0) == 6, "first_hit_time: A는 t6에 닿음")
+    win = pp.replan_windowed(pa, pa_prev, mapf_py.schedule_from_plan(pa, pa_prev), pa_obs, 0)
+    check(list(win.event_times) == [0, 3], "replan_windowed: t0, t3에 부름")
+    check(not win.deferred_ids and win.escalation_tier == 0, "미룬 로봇 없이 안전망 없이 끝남")
+    check(all(not (c.x == o.x and c.y == o.y) for p in win.paths.values() for c in p for o in pa_obs),
+          "아무도 장애물을 밟지 않음")
+
     print("\nSMOKE TEST PASSED")
 
 
