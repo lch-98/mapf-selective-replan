@@ -64,6 +64,8 @@ struct ScenarioResult {
     double selective_replan_ms{0.0};
     int escalation_tier{0};  // selective_replan_ok일 때만 의미 있음
     int plan_attempts{1};    // 이 trial을 채우기 위해 plan()을 몇 번 시도했는지
+    int plan_failures{0};    // 그중 처음 PP 계획(plan())이 실패해서 버린 횟수
+    int obstacle_retries{0}; // 그중 계획은 됐지만 장애물이 아무도 안 막아서(standing: 조건 맞는 로봇 없음) 버린 횟수
 
     // 경로 품질(12장). 방법이 실패했으면 -1.
     int initial_soc{-1};               // 초기 계획의 경로 비용 합(도착 시각의 합)
@@ -604,6 +606,9 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
     constexpr int kMaxAttempts = 200;
 
     std::vector<Cell> free_cells = collect_free_cells(map); // 벽이 아닌 모든 Cell들을 수집
+    // 버린 이유를 따로 센다: plan_attempts = plan_failures + obstacle_retries + 1(쓴 배치).
+    int plan_failures = 0;
+    int obstacle_retries = 0;
 
     for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
         std::vector<Agent> agents = make_random_agents(free_cells, num_agents, rng); // 벽이 아닌 모든 Cell 들에서 시작점과 도착점을 랜덤으로 에이전트에 할당
@@ -618,10 +623,13 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
         PrioritizedPlanner planner(map, initial_config);
         std::optional<PlanResult> initial = planner.plan(agents);
         if (!initial.has_value()) {
+            ++plan_failures;
             if (attempt == kMaxAttempts) {
                 ScenarioResult failed;
                 failed.plan_ok = false;
                 failed.plan_attempts = attempt;
+                failed.plan_failures = plan_failures;
+                failed.obstacle_retries = obstacle_retries;
                 return failed;
             }
             continue;  // 이번 무작위 배치는 초기 계획부터 실패 — 다시 뽑는다.
@@ -639,10 +647,13 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
         // 한 번 확인해서 검증 단계를 빠뜨리지 않는다.
         if (obstacles.empty() ||
             !obstacles_actually_block_someone(agents, *initial, obstacles, current_time)) {
+            ++obstacle_retries;
             if (attempt == kMaxAttempts) {
                 ScenarioResult failed;
                 failed.plan_ok = false;
                 failed.plan_attempts = attempt;
+                failed.plan_failures = plan_failures;
+                failed.obstacle_retries = obstacle_retries;
                 return failed;
             }
             continue;  // 이번 장애물은 아무도 안 막음 — 처음부터 다시 뽑는다.
@@ -651,12 +662,16 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
         ScenarioResult result =
             run_one_scenario(map, agents, *initial, obstacles, current_time, replan_config, astar_config);
         result.plan_attempts = attempt;
+        result.plan_failures = plan_failures;
+        result.obstacle_retries = obstacle_retries;
         return result;
     }
 
     ScenarioResult failed;
     failed.plan_ok = false;
     failed.plan_attempts = kMaxAttempts;
+    failed.plan_failures = plan_failures;
+    failed.obstacle_retries = obstacle_retries;
     return failed;
 }
 
@@ -701,7 +716,8 @@ std::string run_task(const Task& task) {
         << r.selective_replan_changed << "," << r.selective_replanned << "," << r.selective_conflicts
         << "," << r.selective_yielded << "," << r.full_replan_away << "," << r.selective_away << ","
         << r.current_time << "," << r.working_at_t << "," << r.full_replan_delayed << ","
-        << r.selective_delayed << "," << r.selective_rescued << "," << r.moving_at_t << "\n";
+        << r.selective_delayed << "," << r.selective_rescued << "," << r.moving_at_t << "," << r.plan_failures << ","
+        << r.obstacle_retries << "\n";
     return out.str();
 }
 
@@ -909,7 +925,8 @@ int main(int argc, char** argv) {
                  "selective_replan_ok,selective_replan_ms,escalation_tier,initial_soc,"
                  "full_replan_soc,full_replan_changed,selective_replan_soc,"
                  "selective_replan_changed,selective_replanned,selective_conflicts,selective_yielded,full_replan_away,selective_away,"
-                 "current_time,working_at_t,full_replan_delayed,selective_delayed,selective_rescued,moving_at_t\n";
+                 "current_time,working_at_t,full_replan_delayed,selective_delayed,selective_rescued,moving_at_t,"
+                 "plan_failures,obstacle_retries\n";
     for (const std::string& line : results) std::cout << line;
 
     return 0;
