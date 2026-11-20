@@ -23,7 +23,7 @@
 > **이름 안내.** 고수준 계획기는 **고정 우선순위 계획(Prioritized Planning, PP)**이다. 예전 코드
 > 이름은 `PBS`였지만 PBS(Ma et al., 2019)와는 다른 알고리즘이라 2026-09-13에
 > `PrioritizedPlanner`로 바꿨다(`PBSConfig` → `ReplanConfig`, `PBSResult` → `PlanResult`).
-> 옛 문서(05장 등)의 "PBS"는 이 클래스를 가리킨다.
+> 옛 문서(00~09장, DESIGN.md, PROGRESS.md)의 "PBS" 표기는 2026-11-20에 PP로 고쳤다. 남은 "PBS"는 진짜 PBS(Ma et al., 2019)를 가리킨다.
 
 ---
 
@@ -65,7 +65,7 @@ Path_Planning_Core_/
 │
 ├── tests/                     GoogleTest 단위 테스트
 ├── docs/                      단계별 설계/구현 설명 문서(00~14) + 진행 이력
-│   ├── 00~08_*.md               단계별 설계/구현 설명(빌드 계획, Map/Agent, PP(옛 이름 PBS), 벤치마크 등)
+│   ├── 00~08_*.md               단계별 설계/구현 설명(빌드 계획, Map/Agent, PP, 벤치마크 등)
 │   ├── 09_dynamic_obstacles_plan.md  움직이는(동적) 장애물 지원 확장 설계 분석 — 이후 연구
 │   ├── 10~13_*.md               알고리즘 검증, 등록 순서 개선(fixed-first), 도달성 검사·구조 후보 정교화
 │   ├── 14_session_summary_easy.md  10~13장을 가장 쉬운 말로 정리한 문서
@@ -295,7 +295,7 @@ python app.py --map open --agents 10 --seed 43
   `ReplanConfig`로 등록 순서(`order`), 도달성 검사(`check_reachability`), 구조 후보 선택
   방법(`rescue_selection`)을 고를 수 있다(기본값은 모두 원래 방식, [12·13장](docs/12_fixed_first_replan.md)).
 
-자세한 원리는 [`docs/05_pbs.md`](docs/05_pbs.md)(옛 이름 PBS로 쓰인 문서), [`docs/06_selective_replan.md`](docs/06_selective_replan.md),
+자세한 원리는 [`docs/05_prioritized_planning.md`](docs/05_prioritized_planning.md)(PP 설명), [`docs/06_selective_replan.md`](docs/06_selective_replan.md),
 연구 포지셔닝은 [`docs/07_research_positioning.md`](docs/07_research_positioning.md),
 최근 검증·개선은 [`docs/14_session_summary_easy.md`](docs/14_session_summary_easy.md)를 참고.
 

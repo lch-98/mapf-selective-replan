@@ -10,7 +10,7 @@
 ## 0.1 기본 원칙
 
 1. **docs의 장 순서 = 코드 구현 순서.** 01~06장을 만든 순서 그대로,
-   가장 작은 단위(Cell)부터 가장 큰 단위(PBS::replan)까지 쌓아 올립니다.
+   가장 작은 단위(Cell)부터 가장 큰 단위(PrioritizedPlanner::replan)까지 쌓아 올립니다.
 2. **컴파일되는 가장 작은 단위부터.** 한꺼번에 여러 파일을 작성하지 않고,
    "이거 하나만 추가하면 빌드+테스트가 통과한다"는 단위로 잘라서 진행합니다.
 3. **모든 구현 단계는 테스트를 동반합니다.** 코드를 작성한 직후, 그 코드가
@@ -28,8 +28,8 @@
 | 1 | `Cell`, `SpaceTimeCell`, `Map`, `Agent` | [02장](02_map_and_agent.md) | `core/include/mapf/{map,agent}.hpp`, `core/src/map.cpp` |
 | 2 | `ReservationTable` | [03장](03_reservation_table.md) | `core/include/mapf/reservation_table.hpp`, `core/src/reservation_table.cpp` |
 | 3 | `SpaceTimeAStar` | [04장](04_space_time_astar.md) | `core/include/mapf/space_time_astar.hpp`, `core/src/space_time_astar.cpp` |
-| 4 | `PBS::plan` | [05장](05_pbs.md) | `core/include/mapf/pbs.hpp`, `core/src/pbs.cpp` (plan만) |
-| 5 | `PBS::replan` (Tier 0 → 1 → 2) | [06장](06_selective_replan.md) | `core/src/pbs.cpp` (replan 추가) |
+| 4 | `PrioritizedPlanner::plan` | [05장](05_prioritized_planning.md) | `core/include/mapf/prioritized_planner.hpp`, `core/src/prioritized_planner.cpp` (plan만) |
+| 5 | `PrioritizedPlanner::replan` (Tier 0 → 1 → 2) | [06장](06_selective_replan.md) | `core/src/prioritized_planner.cpp` (replan 추가) |
 
 각 단계는 "그 전 단계가 테스트까지 통과한 뒤에만" 시작합니다. 예를 들어
 1번(Map)의 테스트가 실패하는 상태에서 2번(ReservationTable)을 만들기

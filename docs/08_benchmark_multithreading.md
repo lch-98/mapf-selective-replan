@@ -285,15 +285,15 @@ target_link_libraries(run_benchmark PRIVATE mapf_core Threads::Threads)
 없었다 — "중간 칸이니까 당연히 막겠지"라고 추론만 하고 있었다.
 
 **고친 방법**:
-1. `PBS::path_hits_obstacle`을 `private`에서 `public static`으로 승격
-   (`core/include/mapf/pbs.hpp`) — 이 함수는 `replan()`이 내부적으로
+1. `PrioritizedPlanner::path_hits_obstacle`을 `private`에서 `public static`으로 승격
+   (`core/include/mapf/prioritized_planner.hpp`) — 이 함수는 `replan()`이 내부적으로
    "이 로봇이 이 장애물 때문에 영향받는가"를 판단할 때 쓰는 바로 그
    함수다. 벤치마크가 **똑같은 함수**를 그대로 재사용하게 만들어서,
    "벤치마크가 판단하는 기준"과 "라이브러리가 실제로 판단하는 기준"이
    어긋날 위험을 원천 차단했다.
 2. [benchmark.cpp:207-213](../tools/benchmark.cpp#L207-L213)에
    `obstacles_actually_block_someone` 함수를 추가 — 모든 로봇에 대해
-   `PBS::path_hits_obstacle`을 호출해서 한 명이라도 막히면 `true`.
+   `PrioritizedPlanner::path_hits_obstacle`을 호출해서 한 명이라도 막히면 `true`.
 3. [benchmark.cpp:284-296](../tools/benchmark.cpp#L284-L296)에서, 장애물을
    고른 직후 이 함수로 검증하고, 아무도 안 막히면 그 시나리오를 버리고
    재시도한다.
@@ -373,7 +373,7 @@ deadlock 같은 전형적인 동시성 버그는 없었다.
    장애물 생성 로직이 "다른 로봇의 목적지를 실수로 막아버려서 A*가
    수십 초간 헛수고하는" 순차 로직 버그 때문이었다.
 4. 그 김에 "장애물이 실제로 누군가의 경로를 막는지"를 라이브러리의
-   실제 판별 함수(`PBS::path_hits_obstacle`)로 직접 검증하도록 만들어서,
+   실제 판별 함수(`PrioritizedPlanner::path_hits_obstacle`)로 직접 검증하도록 만들어서,
    벤치마크가 측정하는 시나리오의 정당성 자체도 함께 강화했다.
 
 ---

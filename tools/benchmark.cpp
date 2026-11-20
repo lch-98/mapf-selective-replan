@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <cstdlib>
 #include <iostream>
 #include <map>
@@ -601,6 +602,47 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
     return result;
 }
 
+// 실패 사례 저장(2026-11-20, 사용자 요청 "재계획에 실패하는 경우 찾기"): --dump-failures DIR이면
+// 방법 B가 안전망을 쓰거나(escalation_tier == -1) 실패한 시나리오를 DIR/<지도>_<로봇수>_<번호>.json으로 저장한다.
+// 파이썬(tools/analyze_failures.py)이 이 파일을 읽어 같은 장면을 그대로 다시 돌리고 원인을 나눈다. 결과에는 영향 없음.
+std::string g_dump_dir;
+
+void dump_scenario(const std::string& name, const Map& map, const std::vector<Agent>& agents,
+                   const PlanResult& initial, const std::vector<Cell>& obstacles, int current_time,
+                   const ScenarioResult& r) {
+    std::ofstream out(g_dump_dir + "/" + name + ".json");
+    out << "{" << "\n  \"map\": [";
+    for (int y = 0; y < map.height(); ++y) {
+        out << (y ? "," : "") << "\"";
+        for (int x = 0; x < map.width(); ++x) out << (map.is_passable(x, y) ? '.' : '#');
+        out << "\"";
+    }
+    out << "]," << "\n  \"agents\": [";
+    for (size_t i = 0; i < agents.size(); ++i) {
+        const Agent& a = agents[i];
+        out << (i ? "," : "") << "[" << a.id << "," << a.start.x << "," << a.start.y << "," << a.goal.x << ","
+            << a.goal.y << "," << a.service_time << "]";
+    }
+    out << "]," << "\n  \"paths\": {";
+    bool first = true;
+    for (const Agent& a : agents) {
+        out << (first ? "" : ",") << "\"" << a.id << "\": [";
+        first = false;
+        const Path& path = initial.at(a.id);
+        for (size_t i = 0; i < path.size(); ++i) {
+            out << (i ? "," : "") << "[" << path[i].x << "," << path[i].y << "," << path[i].t << "]";
+        }
+        out << "]";
+    }
+    out << "}," << "\n  \"obstacles\": [";
+    for (size_t i = 0; i < obstacles.size(); ++i) {
+        out << (i ? "," : "") << "[" << obstacles[i].x << "," << obstacles[i].y << "]";
+    }
+    out << "]," << "\n  \"current_time\": " << current_time << "," << "\n  \"full_replan_ok\": "
+        << (r.full_replan_ok ? 1 : 0) << ", \"selective_replan_ok\": " << (r.selective_replan_ok ? 1 : 0)
+        << ", \"escalation_tier\": " << r.escalation_tier << "\n}" << "\n";
+}
+
 // plan()에 성공하고, 또한 무작위로 고른 장애물이 실제로 그 plan을 깨뜨리는
 // (=적어도 한 로봇의 기존 경로와 실제로 겹치는) 시나리오를 찾을 때까지
 // 재시도한다. 둘 중 하나라도 안 되면 표본에서 제외하고 다시 뽑는다 —
@@ -622,7 +664,8 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
                                               const ReplanConfig& replan_config,
                                               const AStarConfig& astar_config,
                                               std::mt19937& service_rng, int service_lo,
-                                              int service_hi, ObstacleMode obstacle_mode) {
+                                              int service_hi, ObstacleMode obstacle_mode,
+                                              const std::string& dump_name) {
     constexpr int kMaxAttempts = 200;
 
     std::vector<Cell> free_cells = collect_free_cells(map); // 벽이 아닌 모든 Cell들을 수집
@@ -684,6 +727,9 @@ ScenarioResult find_solvable_scenario_and_run(const Map& map, int num_agents, st
         result.plan_attempts = attempt;
         result.plan_failures = plan_failures;
         result.obstacle_retries = obstacle_retries;
+        if (!g_dump_dir.empty() && (!result.selective_replan_ok || result.escalation_tier == -1)) {
+            dump_scenario(dump_name, map, agents, *initial, obstacles, current_time, result);
+        }
         return result;
     }
 
@@ -725,7 +771,10 @@ std::string run_task(const Task& task) {
                                                       task.replan_config, task.astar_config,
                                                       service_rng,
                                                       task.service_lo, task.service_hi,
-                                                      task.obstacle_mode);
+                                                      task.obstacle_mode,
+                                                      std::string(task.map_name) + "_" +
+                                                          std::to_string(task.num_agents) + "_" +
+                                                          std::to_string(task.trial));
 
     std::ostringstream out;
     out << task.map_name << "," << task.num_agents << "," << task.trial << ","
@@ -850,6 +899,8 @@ int main(int argc, char** argv) {
                 std::cerr << "--tie-break must be larger-g, smaller-g or random:SEED\n";
                 return 1;
             }
+        } else if (arg == "--dump-failures" && i + 1 < argc) {
+            g_dump_dir = argv[++i];
         } else if (arg == "--affected-window" && i + 1 < argc) {
             // 6번 Park식(27장 P1): 지금부터 W스텝 안에 장애물에 닿는 로봇만 지금 다시 계획, 나머지는 창에 들어올 때.
             replan_config.affected_window = std::atoi(argv[++i]);
@@ -867,7 +918,7 @@ int main(int argc, char** argv) {
             }
         } else {
             std::cerr << "usage: run_benchmark [--large | --huge] [--agents a,b,c] [--max-timestep N] [--repeats N] [--tiers K] "
-                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing] [--affected-window W]\n";
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing] [--affected-window W] [--dump-failures DIR]\n";
             return 1;
         }
     }

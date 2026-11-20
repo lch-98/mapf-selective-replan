@@ -7,18 +7,18 @@
 > 미뤘다. 또 코드 이름이 바뀌었다: `pbs.cpp` → `prioritized_planner.cpp`, `PBS` →
 > `PrioritizedPlanner`. 착수할 때 아래 함수 위치를 새 파일에서 다시 확인할 것.
 
-정적 장애물 기반 PBS를 동적(움직이는) 장애물 지원으로 확장하려면 무엇을
+정적 장애물 기반 PP를 동적(움직이는) 장애물 지원으로 확장하려면 무엇을
 바꿔야 하는지 분석한 결과. 실제 착수 전에는 아래 함수/라인 번호가 코드
 변경으로 여전히 유효한지 반드시 다시 확인할 것.
 
 ## 현재 상태
 
-`core/src/pbs.cpp`의 `new_obstacles`(`std::vector<Cell>`)는 **정적 장애물**이다.
+`core/src/prioritized_planner.cpp`의 `new_obstacles`(`std::vector<Cell>`)는 **정적 장애물**이다.
 `reserve_new_obstacles`가 `current_time`부터 `max_timestep`까지 같은 `(x,y)`를
 계속 예약한다 — "장애물이 나타나는 시점을 미리 몰랐다"는 것이지, 장애물
 자체가 움직이는 "동적 장애물"은 아니다.
 
-이 프로젝트가 목표로 하는 연구는 동적 장애물 MAPF이지만, 현재 벤치마크/PBS
+이 프로젝트가 목표로 하는 연구는 동적 장애물 MAPF이지만, 현재 벤치마크/PP
 코드는 "실행 도중 알려지는 정적 장애물의 선택적 재계획"만 다룬다. 이 둘을
 혼동하지 않아야 한다.
 
@@ -31,13 +31,13 @@
 
 ## 바꿔야 하는 부분
 
-1. **`reserve_new_obstacles`** (`core/src/pbs.cpp:114`) — 지금은 `Cell` 하나를
+1. **`reserve_new_obstacles`** (`core/src/prioritized_planner.cpp:114`) — 지금은 `Cell` 하나를
    모든 t에 반복 등록. 시각별로 다른 위치를 등록하도록 변경 필요.
 2. **`new_obstacles` 파라미터 타입** (`std::vector<Cell>`) — `path_hits_obstacle`,
    `full_replan`, `replan`, `try_replan_set` 시그니처 전부 이 타입을 쓴다.
    장애물의 궤적을 표현하는 새 타입(예: `std::vector<SpaceTimeCell>` 또는
    로봇처럼 id+경로)으로 바꿔야 한다.
-3. **`path_hits_obstacle`** (`core/src/pbs.cpp:99`) — 지금은 "이 칸이 obstacles
+3. **`path_hits_obstacle`** (`core/src/prioritized_planner.cpp:99`) — 지금은 "이 칸이 obstacles
    목록에 있나"만 비교. "이 시각(t)에 그 시각의 장애물 위치와 같은가"로 변경
    필요.
 4. **장애물이 언젠가 사라지는 경우까지 다룰지**는 별도 설계 결정이 필요하다
@@ -47,7 +47,7 @@
 
 장애물의 궤적을 어떤 타입으로 표현할지가 코드량보다 중요한 결정이다.
 극단적으로는 "장애물을 최우선순위 가상 로봇처럼 다루기" 방식으로
-`PBSResult`와 유사한 표현을 재사용하는 방법도 있다.
+`PlanResult`와 유사한 표현을 재사용하는 방법도 있다.
 
 ## 규모 감각
 

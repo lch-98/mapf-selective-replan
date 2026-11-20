@@ -19,8 +19,8 @@ Windows/Ubuntu 듀얼부팅 환경에서 작업하며, OS를 바꿔도(즉 로�
 | 1 | Cell, SpaceTimeCell, Map, Agent | 완료 |
 | 2 | ReservationTable | 완료 |
 | 3 | SpaceTimeAStar | 완료 |
-| 4 | PBS::plan | 완료 (버그 2개 발견 및 수정) |
-| 5 | PBS::replan (Tier 0→1→2, 06장) | 완료 (2026-06-28) |
+| 4 | PrioritizedPlanner::plan | 완료 (버그 2개 발견 및 수정) |
+| 5 | PrioritizedPlanner::replan (Tier 0→1→2, 06장) | 완료 (2026-06-28) |
 | Phase 2 | pybind11 + pygame 2D GUI 데모 | 완료 (2026-07-10) |
 | Phase 3 | 선택적 재계획 + 계층적 확장, C++ 벤치마크·시각화 | 완료 |
 | Phase 3+ | 알고리즘 보완: 작업 시간(문제 4) → A* 속도(문제 1) → 양보(문제 3) | 완료 2026-11-17 |
@@ -43,10 +43,10 @@ Phase 4/5의 상세 계획은 [`DESIGN.md`](../DESIGN.md) §5, §6, §7 참고.
 등록 루프는 여전히 `reserve()`(무조건 덮어쓰기)를 쓰고 있었다. Space-time A*는
 시작 칸의 점유를 검사하지 않으므로(다음 칸 이동 시에만 확인), 낮은 순위
 로봇의 출발 칸이 더 높은 순위 로봇이 이미 정당하게 차지한 (칸,시각)과 같으면
-(특히 start==goal일 때) 그 충돌이 검사 없이 사라지고 `PBS::plan()`이 실제로
+(특히 start==goal일 때) 그 충돌이 검사 없이 사라지고 `PrioritizedPlanner::plan()`이 실제로
 충돌하는 두 경로를 성공으로 반환했다. → vertex 등록도 `reserve_if_unowned`로
 바꾸고, 거절되면 즉시 `false` 반환하도록 수정. 회귀 테스트
-`PBSTest.RejectsAgentWhoseStartCellIsAlreadyOwnedAtThatTime` 추가.
+`PrioritizedPlannerTest.RejectsAgentWhoseStartCellIsAlreadyOwnedAtThatTime` 추가.
 
 ### 입력 검증 4건 (2026-06-29)
 
@@ -56,12 +56,12 @@ Phase 4/5의 상세 계획은 [`DESIGN.md`](../DESIGN.md) §5, §6, §7 참고.
 - `Map(rows)`: 행마다 길이가 다르면 예외.
 - `Map(width,height)`: 음수면 예외(생성자 본문 진입 전 멤버 초기화 리스트에서
   `std::vector` 생성이 먼저 일어나므로, `width<0?0:width`로 미리 걸러 crash 방지).
-- `PBS::plan()`: agents에 중복 id 있으면 예외.
-- `agents`가 빈 벡터면 빈 `PBSResult`(성공)로 처리.
+- `PrioritizedPlanner::plan()`: agents에 중복 id 있으면 예외.
+- `agents`가 빈 벡터면 빈 `PlanResult`(성공)로 처리.
 
 ---
 
-## 4단계(PBS::plan) 버그 2건 — 사용자가 직접 코드 대조로 발견
+## 4단계(PrioritizedPlanner::plan) 버그 2건 — 사용자가 직접 코드 대조로 발견
 
 1. **Tail Reservation이 다른 로봇의 vertex를 덮어쓰는 버그**:
    `register_path`의 Tail 루프(`reserve` 사용)가 무조건 덮어쓰기라서, 더 높은
@@ -79,24 +79,24 @@ Phase 4/5의 상세 계획은 [`DESIGN.md`](../DESIGN.md) §5, §6, §7 참고.
 포함)의 목적지를 t=0~max_timestep까지 미리 통째로 선점했다. 충돌은 "같은
 칸+같은 시각"에서만 생기므로 미리 선점은 불필요하게 보수적이었고, 오히려
 다른 로봇의 Tail Reservation을 침범하는 버그의 원인이기도 했다. → 이 장치를
-완전히 삭제, Tail Reservation 하나만으로 충분함을 `docs/05_pbs.md` 5.6절에
-반영. `unreserve_if_owned_by`는 이제 `PBS`에서 호출되지 않지만
+완전히 삭제, Tail Reservation 하나만으로 충분함을 `docs/05_prioritized_planning.md` 5.6절에
+반영. `unreserve_if_owned_by`는 이제 `PP`에서 호출되지 않지만
 `ReservationTable`의 일반 기능으로 남아있다.
 
-## PBS의 알려진 한계
+## PP의 알려진 한계
 
-PBS는 "낮은 순위가 항상 양보"하는 고정 우선순위 구조라서, 1순위 로봇이
+PP는 "낮은 순위가 항상 양보"하는 고정 우선순위 구조라서, 1순위 로봇이
 탐색할 때는 항상 테이블이 비어있는 상태에서 최단경로를 그냥 가져간다 —
 낮은 순위를 위해 우회하는 일이 없다. "사실 한쪽이 조금만 비켜주면 둘 다
-풀리는" 상황에서도 PBS 자체로는 실패할 수 있다. 이것이 `docs/06_selective_replan.md`
+풀리는" 상황에서도 PP 자체로는 실패할 수 있다. 이것이 `docs/06_selective_replan.md`
 6.5절 "Tier 0의 한계"이고, Tier 1(계층적 확장)의 출발점이다.
 
 ---
 
-## 5단계(PBS::replan) 구현 (2026-06-28)
+## 5단계(PrioritizedPlanner::replan) 구현 (2026-06-28)
 
-`core/include/mapf/pbs.hpp`/`core/src/pbs.cpp`에 `PBS::replan()`,
-`ReplanResult`, `PBSConfig` 추가. `docs/06_selective_replan.md`의
+`core/include/mapf/prioritized_planner.hpp`/`core/src/prioritized_planner.cpp`에 `PrioritizedPlanner::replan()`,
+`ReplanResult`, `ReplanConfig` 추가. `docs/06_selective_replan.md`의
 Tier 0(영향받은 로봇만) → Tier 1..N(`get_owner`로 원인 로봇 추적,
 working_ids 확장) → 안전망(전체 재계획, 현재 위치 기준) 흐름을 구현.
 
@@ -122,7 +122,7 @@ working_ids 확장) → 안전망(전체 재계획, 현재 위치 기준) 흐름
    (A*는 Tail Reservation을 모르고 최단경로만 찾으므로, Tail 충돌은 재탐색으로
    해소가 안 된다). Tier 1이 효과를 보는 건 충돌이 K의 목적지가 아니라
    지나가는 중간 vertex일 때뿐이다.
-3. 위 두 함정 때문에 `previous_paths`를 `PBS::plan()` 결과에 의존하지 않고
+3. 위 두 함정 때문에 `previous_paths`를 `PrioritizedPlanner::plan()` 결과에 의존하지 않고
    손으로 직접 구성하는 게 의도한 시공간 충돌을 정확히 만들 때 더 빠르고
    확실했다.
 
@@ -137,7 +137,7 @@ CMake 구조에 바로 추가 가능해서.
 
 **만든 것**: `tools/benchmark_maps.hpp`(32x32 맵 2종: `make_open_map()` 넓은
 통로, `make_corridor_map()` 좁은 통로), `tools/benchmark.cpp`(`run_benchmark`
-실행 파일, CSV 출력), `PBS::full_replan()`을 `private`에서 `public`으로 승격.
+실행 파일, CSV 출력), `PrioritizedPlanner::full_replan()`을 `private`에서 `public`으로 승격.
 
 **비교 대상**: 방법A=`full_replan()`(베이스라인), 방법B=`replan()`(제안 기법).
 같은 초기 경로·같은 장애물·같은 `current_time`을 두 방법에 동일하게 적용해
@@ -146,10 +146,10 @@ CMake 구조에 바로 추가 가능해서.
 ### 발견·수정한 버그 3건 (모두 사용자가 직접 의심해서 발견)
 
 1. **40대 제외 결정의 근거**: 16x16 완전히 빈 맵에서도 40대 `plan()` 성공률이
-   0%임을 재현 확인 — 맵 문제가 아니라 PBS의 고정 우선순위 구조 자체가
+   0%임을 재현 확인 — 맵 문제가 아니라 PP의 고정 우선순위 구조 자체가
    "로봇 수가 많을 때 무작위 배치"에 본질적으로 취약한 것. 이후(2026-07-09)
    버그 수정과 함께 다시 포함(`agent_counts = {5, 10, 20, 40}`) — 성공률이
-   낮은 건 PBS의 실제 한계를 보여주는 데이터이므로 그대로 둔다.
+   낮은 건 PP의 실제 한계를 보여주는 데이터이므로 그대로 둔다.
 2. **`current_time`을 "경로 길이의 절반"으로 임의로 정했던 설계 오류**: 장애물과
    무관한 시점이면 재계획이 사실상 장애물 없는 것과 같아져 비교가 무의미해진다.
    → 장애물이 실제로 어느 로봇의 경로와 충돌하는 시각을 찾아 그 시점을
@@ -219,7 +219,7 @@ pthread 자동 처리).
    문제 재현. → `all_starts`/`all_goals` 둘 다에 속하지 않는 첫 칸을 찾도록 수정.
 3. **로봇 40대 벤치마크 데이터 없음**: 다시 포함(`agent_counts = {5, 10, 20, 40}`).
    corridor 40대는 `plan_attempts` 평균 187, 성공 표본이 50개 중 6개뿐인
-   경우도 있지만, 이는 버그가 아니라 PBS 고정 우선순위 구조의 실제 한계.
+   경우도 있지만, 이는 버그가 아니라 PP 고정 우선순위 구조의 실제 한계.
 
 **`tools/plot_benchmark.py`(신규)**: CSV → matplotlib 4종 그래프
 (`success_rate.png`, `runtime_box.png`, `escalation_tier.png`,
@@ -245,7 +245,7 @@ pthread 자동 처리).
 ## Phase 2: pybind11 + pygame 2D GUI 데모 (2026-07-10)
 
 DESIGN.md Phase 2 원안(pybind11+pygame)을 그대로 따름 — 순수 Python 재구현이
-아니라 실제 컴파일된 C++ PBS/Map/Agent를 그대로 호출.
+아니라 실제 컴파일된 C++ PP/Map/Agent를 그대로 호출.
 
 ### 새 디렉터리
 - `bindings/`: `CMakeLists.txt`, `mapf_bindings.cpp`(바인딩 코드 전부).
@@ -262,15 +262,15 @@ DESIGN.md Phase 2 원안(pybind11+pygame)을 그대로 따름 — 순수 Python 
    별도로 필요하다.
 
 ### 바인딩 범위 (`bindings/mapf_bindings.cpp`)
-`Cell`, `SpaceTimeCell`, `Agent`, `Map`, `AStarConfig`, `PBSConfig`,
-`ReplanResult`, `PBS`만 바인딩. `ReservationTable`/`SpaceTimeAStar`는 의도적으로
+`Cell`, `SpaceTimeCell`, `Agent`, `Map`, `AStarConfig`, `ReplanConfig`,
+`ReplanResult`, `PP`만 바인딩. `ReservationTable`/`SpaceTimeAStar`는 의도적으로
 제외(GUI가 안 쓰고, 댕글링 참조 위험 회피). 핵심 포인트:
 - `Cell`/`SpaceTimeCell`에 `__hash__`를 GUI 편의를 위해 새로 추가(C++ API에는
   없던 것).
-- `PBSResult`는 커스텀 바인딩 없이 `pybind11/stl.h`의 제네릭 caster가
+- `PlanResult`는 커스텀 바인딩 없이 `pybind11/stl.h`의 제네릭 caster가
   `dict[int, list[SpaceTimeCell]]`로 자동 변환한다.
-- **`py::keep_alive<1,2>()`가 PBS 생성자 바인딩에 필수** — PBS가 `const Map&`을
-  멤버로 저장하므로, Python Map 객체가 PBS보다 먼저 GC되면 댕글링 참조 크래시.
+- **`py::keep_alive<1,2>()`가 PP 생성자 바인딩에 필수** — PP가 `const Map&`을
+  멤버로 저장하므로, Python Map 객체가 PP보다 먼저 GC되면 댕글링 참조 크래시.
 
 ### GUI 설계 결정
 - 장애물 클릭 시 `full_replan`과 `replan`을 동시에 호출해 좌우 분할 화면으로
@@ -344,7 +344,7 @@ TurtleBot3 N대 네임스페이스 분리 배치, 창고형 월드, Gazebo actor
 장애물 주입. 저수준 추종은 Nav2 전체보다 간단한 pure-pursuit로 시작(MAPF
 레이어 평가가 목적이므로).
 
-동적(움직이는) 장애물 지원으로 PBS 자체를 확장하는 별도 분석은
+동적(움직이는) 장애물 지원으로 PP 자체를 확장하는 별도 분석은
 [`09_dynamic_obstacles_plan.md`](09_dynamic_obstacles_plan.md) 참고.
 
 ---
@@ -421,7 +421,7 @@ max_timestep까지 goal에 **영원히 머문다**고 보고 등록한다. 그�
 이제 A*가 찾은 경로는 `register_path`의 Tail 검사에서 거절되지 않는다(그 검사는
 `replan()`이 옛 경로를 A* 없이 등록할 때의 안전망으로 남음).
 
-### 수정 2(검증 중 발견): 재계획 경로의 시각 끊김 — `pbs.cpp` `splice_paths()`
+### 수정 2(검증 중 발견): 재계획 경로의 시각 끊김 — `prioritized_planner.cpp` `splice_paths()`
 
 벤치마크에 임시 전수 검사(모든 plan/full_replan/replan 결과의 충돌·장애물·
 출발/목적지·연속성)를 넣어보니 1197개 중 293개가 **시각이 건너뛴 경로**였다(충돌은
@@ -456,7 +456,7 @@ max_timestep까지 goal에 **영원히 머문다**고 보고 등록한다. 그�
 | selective_replan 실패 | 31 | 1 |
 | 안전망(-1)으로 끝난 수 | 4 | 43 |
 
-- 파일 머리 주석의 "40대는 PBS 고정 우선순위 한계로 plan() 성공률이 낮다"는
+- 파일 머리 주석의 "40대는 PP 고정 우선순위 한계로 plan() 성공률이 낮다"는
   설명의 상당 부분이 사실은 이 A* 도착 판정 문제였다.
 - 안전망 비율 증가는 예전엔 plan() 실패로 빠지던 어려운 시나리오(40대)가 표본에
   들어온 영향이 크다(표본이 달라져 같은 시나리오끼리의 비교는 아님).
@@ -528,7 +528,7 @@ A* 수정 후 32x32 벤치마크는 두 방법 모두 성공률이 거의 100%�
 
 ### 등록 순서 변경 (12장)
 
-- `PBSConfig::order` = `ReplanOrder::kPriority`(기본, 원래) / `kFixedFirst`(고정 로봇 먼저 →
+- `ReplanConfig::order` = `ReplanOrder::kPriority`(기본, 원래) / `kFixedFirst`(고정 로봇 먼저 →
   처음 영향받은 로봇 → 구조 로봇). `try_replan_set`은 처리 순서만 바꿈.
 - 대규모 안전망 없이 성공 207 → 394/400, 경로가 바뀐 로봇 수 평균 45.4 → 4.5. 우선순위
   높은 로봇이 돌아가는 대가(비용 최대 +24)가 있지만 평균 비용은 감소. 충돌 0/3117.
@@ -537,8 +537,8 @@ A* 수정 후 32x32 벤치마크는 두 방법 모두 성공률이 거의 100%�
 
 ### 아이디어 3 (13장)
 
-- `PBSConfig::check_reachability`: 벽+새 장애물만으로 BFS, 못 가면 즉시 실패(결과 동일, 시간만 절약).
-- `PBSConfig::rescue_selection` = `kBlockedCells`(기본) / `kShortestPathConflicts`(최단 경로와
+- `ReplanConfig::check_reachability`: 벽+새 장애물만으로 BFS, 못 가면 즉시 실패(결과 동일, 시간만 절약).
+- `ReplanConfig::rescue_selection` = `kBlockedCells`(기본) / `kShortestPathConflicts`(최단 경로와
   부딪히는 로봇만 구조 후보).
 - 벤치마크 `--reachability`, `--rescue` 추가. 테스트 총 52개.
 - 대규모(fixed-first 위, Tier 1): 3-2로 안전망 3→0, 실패 3→2, 다시 계획한 로봇 수 최댓값
@@ -557,8 +557,8 @@ A* 수정 후 32x32 벤치마크는 두 방법 모두 성공률이 거의 100%�
   `PrioritizedPlannerTest`, `PBSReplanTest` → `SelectiveReplanTest`로 바꿨다. 파이썬도
   `mapf_py.PrioritizedPlanner`, `mapf_py.ReplanConfig`. **동작은 그대로**(테스트 52개,
   파이썬 스모크 테스트 통과).
-- 옛 문서(00~09장, DESIGN.md, 이 파일의 이전 기록)의 "PBS"는 당시 기록이라 그대로 두고,
-  README·DESIGN.md·05장·10장에 이름 안내를 추가했다.
+- (당시) 옛 문서의 "PBS" 표기는 그대로 두고 이름 안내만 추가했다. → **2026-11-20에 옛 문서(00~09장, DESIGN.md,
+  이 파일)의 "PBS" 표기를 PP·현재 코드 이름으로 고쳤다**(맨 아래 기록). 이름을 바꾼 과정을 설명하는 10·14장은 그대로.
 - **장애물 범위**: 연구 대상은 **예기치 않은 장애물(Unexpected Obstacle)** — 실행 도중 나타나
   그 자리에 머무는 장애물. 물류 현장에서 움직이는 장애물은 곧 지나가지만 멈춰 선 장애물은 길을
   오래 막아 다른 경로를 찾게 만든다는 판단(사용자 결정). 움직이는 장애물은 이후 연구(09장).
@@ -772,4 +772,25 @@ A* 수정 후 32x32 벤치마크는 두 방법 모두 성공률이 거의 100%�
   - "Park식 섞어 5/50"은 Park의 성적이 아니라 **C1(적는 순서) ablation**으로만 쓴다(28.1.1~28.1.2 리뷰어 대비).
 - **일정 변경(2026-11-20)**: LNS2식·Park 구간 반경 r 민감도·3차 문헌(6″)은 **우리 구현(7·8번) 뒤, 9번 직전**으로 미룸.
   28장은 그때 다시 본다(지금 이해하지 않아도 됨).
-- 다음: 우리 방법이 실패하는 경우 찾기·분석(사용자 요청 2026-11-20) → 예전 문서의 PBS 표기를 PP로 정리 → 29장 이해 → 7번(Gazebo).
+- 다음: 우리 방법이 실패하는 경우 찾기·분석(사용자 요청 2026-11-20) → 예전 문서의 PP 표기를 PP로 정리 → 29장 이해 → 7번(Gazebo).
+
+## 우리 방법이 실패하는 경우 찾기 (2026-11-20)
+
+[30장](30_failure_cases.md). 사용자 요청: "100%가 아니니 실패하는 경우를 찾아 원인을 알고, 고칠 수 있으면 고치자."
+
+- 벤치마크 `--dump-failures DIR`: 안전망을 쓰거나 실패한 시나리오를 JSON으로 저장(결과 불변 확인). 18건 → `tools/results/v7_failures/`.
+- `tools/analyze_failures.py`: 같은 장면을 파이썬으로 다시 돌려 원인을 나눔. **18건 모두 재현**.
+- 실패는 **좁은 통로 + 150~200대(32×32는 40대)**에서만. 원인은 두 가지: **(가) 넓히기 1단계로 모자람**(Tier 2~3이면 풀림, 4건),
+  **(나) PP 우선순위 순서**(순서만 바꾸면 풀림, 대부분). 길 끊김·시간 상한·비켜 달라기 부족은 0건 → 원래 불가능한 문제는 없었다.
+- 순서만 바꿔 다시 하면 18건 중 15건을 안전망 없이 풂(전체 재계획도 못 푸는 8건 중 6건 포함). 단 실패하는 시도가 0.2~0.9초라
+  **안전망 전에 매번 하면 느려진다.**
+- **결정 필요(30.5)**: ① Tier 1 → 2, ② 전체 재계획까지 실패했을 때만 순서를 바꿔 다시(무작위 재시작, 알려진 기법 — 새롭다고 주장 안 함).
+
+## 옛 문서의 PBS 표기를 PP로 정리 (2026-11-20)
+
+사용자 요청: Ubuntu에서 3D 작업을 지시할 때 혼동이 없게.
+- `docs/05_pbs.md` → **`docs/05_prioritized_planning.md`**(링크 모두 고침).
+- DESIGN.md, PROGRESS.md, 00~09장: 우리 엔진을 가리키던 "PBS" → **PP**, `PBS::plan/replan` → `PrioritizedPlanner::plan/replan`,
+  `PBSConfig` → `ReplanConfig`, `PBSResult` → `PlanResult`, `pbs.hpp/.cpp` → `prioritized_planner.hpp/.cpp`, 옛 테스트 이름 → 현재 이름(126줄).
+- 남긴 "PBS": 진짜 PBS(Ma et al., 2019)를 설명하는 곳, 이름을 바꾼 과정을 기록한 곳(10·14장, 2026-09-13 기록). DESIGN.md·07장의 표에서
+  "PBS가 이 프로젝트 엔진"이라는 잘못된 설명을 고치고 참고문헌에 PP 행을 추가. 07장·DESIGN.md의 "PIEF"도 OID로 고침.

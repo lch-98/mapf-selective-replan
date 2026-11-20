@@ -1,6 +1,6 @@
 # 6. 선택적 재계획 + 계층적 확장 — 이 연구의 핵심 기여
 
-[01~05장](01_mapf_problem.md)에서 만든 두 엔진(저수준 Space-time A*, 고수준 PBS)은
+[01~05장](01_mapf_problem.md)에서 만든 두 엔진(저수준 Space-time A*, 고수준 PP)은
 **"한 번 깨끗하게, 정적인 상황에서"** 모든 로봇의 경로를 계획하는 도구입니다.
 이 장에서 다루는 것은 다른 질문입니다.
 
@@ -13,7 +13,7 @@
 ## 6.1 가장 단순한 대응: 전체 재계획
 
 가장 쉬운 방법은 "장애물이 생기면 로봇 **전체**를 처음부터 다시 계획"하는 것입니다.
-[05장](05_pbs.md)의 `PBS::plan()`을 그냥 다시 호출하면 됩니다(단, 출발점만
+[05장](05_prioritized_planning.md)의 `PrioritizedPlanner::plan()`을 그냥 다시 호출하면 됩니다(단, 출발점만
 "현재 위치"로 바꿔서).
 
 문제는 속도입니다. 로봇이 40대 있는데 장애물이 로봇 1대 경로에만 영향을 줬다고
@@ -96,12 +96,12 @@ RHCR (시간 축 선택성):
 
 ## 6.4 Tier 0 — 가장 단순한 선택적 재계획
 
-`PBS::replan()`이 받는 입력은 다음 네 가지입니다.
+`PrioritizedPlanner::replan()`이 받는 입력은 다음 네 가지입니다.
 
 ```cpp
 std::optional<ReplanResult> replan(
     const std::vector<Agent>& agents,        // 전체 로봇 목록 (우선순위 = 벡터 순서)
-    const PBSResult& previous_paths,         // 직전까지의 전체 경로
+    const PlanResult& previous_paths,         // 직전까지의 전체 경로
     const std::vector<Cell>& new_obstacles,  // 새로 생긴 장애물 칸들
     int current_time);                       // 재계획을 시작하는 절대 시각
 ```
@@ -178,7 +178,7 @@ vs 86~90%). "선택적으로 하면 빠르지만 가끔 못 푸는 문제가 있
 4. 그 후보들을 원래 "영향받은 로봇" 집합(working_ids)에 합쳐서,
    처음부터 다시 한 번 agents 순서대로(우선순위 순서 그대로) 재탐색한다.
 5. 성공하면 끝. 또 실패하면 "또 막은 원인"을 다시 추적해서 한 단계 더 확장한다
-   (PBSConfig.max_escalation_tiers로 몇 단계까지 허용할지 설정 가능, 기본값 1).
+   (ReplanConfig.max_escalation_tiers로 몇 단계까지 허용할지 설정 가능, 기본값 1).
 ```
 
 `replan()`의 메인 루프(코드의 2단계)는 정확히 이 절차를 반복합니다 —
@@ -219,7 +219,7 @@ tier=2 (Tier 2, max_escalation_tiers=2라서 여기까지 허용됨):
 working_ids에 추가하고, **누적된 working_ids 전체를 처음부터 통째로** 다시
 계획"입니다. "R만 따로", "K만 따로" 재탐색하는 게 아니라, 항상 working_ids에
 있는 로봇 전부를 agents 순서(우선순위)대로 한 번에 재탐색합니다 — 이래야
-[05장](05_pbs.md)의 "먼저 계획된 로봇의 경로는 절대 안 바뀐다"는 PBS 규칙이
+[05장](05_prioritized_planning.md)의 "먼저 계획된 로봇의 경로는 절대 안 바뀐다"는 PP 규칙이
 working_ids 안에서도 그대로 유지됩니다.
 
 새로 추가할 원인 로봇이 더 없는 경우(같은 로봇이 또 막혔거나, owner가
@@ -241,7 +241,7 @@ Tier 1에서 새로 끌고 온 K(구조 로봇)를 재탐색할 때, **아직 K�
 순회하면서 working_set(working_ids)에 속한 로봇은 "아직 처리 안 된 동안은
 장벽에서 제외"하고(자기 차례가 와서 새로 재탐색되고 `register_path`로
 등록될 때만 장벽이 됩니다), working_set에 없는 로봇만 처음부터 기존 경로
-그대로 장벽으로 등록합니다. 이게 [05장 5.2절](05_pbs.md)의 `PBS::plan()`이
+그대로 장벽으로 등록합니다. 이게 [05장 5.2절](05_prioritized_planning.md)의 `PrioritizedPlanner::plan()`이
 "아직 계획 안 된 낮은 우선순위 로봇은 장부에 없다"고 보는 것과 정확히
 같은 원리입니다 — Tier 1은 "구조 로봇도 결국 agents 순서(우선순위) 안에서
 정상적으로 한 번 더 계획되는 로봇일 뿐"이라는 관점으로 처리됩니다.
@@ -284,7 +284,7 @@ Tier 1을 `max_escalation_tiers`까지 확장해도 안 풀리면(또는 더 추
 
 ```cpp
 struct ReplanResult {
-    PBSResult        paths;           // 최종 전체 경로 (영향 안 받은 로봇은 기존 경로 그대로)
+    PlanResult        paths;           // 최종 전체 경로 (영향 안 받은 로봇은 기존 경로 그대로)
     std::vector<int> replanned_ids;   // 실제로 다시 탐색된 로봇 id 전부
     int escalation_tier{0};           // 0=Tier 0에서 끝남, 1+=그 단계까지 확장해서 성공, -1=전체 재계획 폴백
     std::vector<int> rescued_ids{};   // Tier 1+에서 새로 추가된 "구조 로봇" id 목록
