@@ -794,3 +794,14 @@ A* 수정 후 32x32 벤치마크는 두 방법 모두 성공률이 거의 100%�
   `PBSConfig` → `ReplanConfig`, `PBSResult` → `PlanResult`, `pbs.hpp/.cpp` → `prioritized_planner.hpp/.cpp`, 옛 테스트 이름 → 현재 이름(126줄).
 - 남긴 "PBS": 진짜 PBS(Ma et al., 2019)를 설명하는 곳, 이름을 바꾼 과정을 기록한 곳(10·14장, 2026-09-13 기록). DESIGN.md·07장의 표에서
   "PBS가 이 프로젝트 엔진"이라는 잘못된 설명을 고치고 참고문헌에 PP 행을 추가. 07장·DESIGN.md의 "PIEF"도 OID로 고침.
+
+## 실패 사례 해결: Tier 2 + 안전망 ② (2026-11-20)
+
+[30장](30_failure_cases.md) 30.6. 사용자 결정: Tier 2, 안전망 ② = 전체 재계획까지 실패했을 때만 처음 영향받은 로봇 순서를 바꿔 다시(최대 3번, 안전망으로 셈).
+- `ReplanConfig::order_restarts`/`restart_seed`, `ReplanResult::order_restart`, 벤치마크 `--order-restarts`·`--restart-seed`, 열 `order_restart`.
+  꺼짐이면 기본 결과 칸마다 같음. 테스트 88개, 파이썬 스모크 [11].
+- 결과: 기본 64×64 성공 399 → **400/400**(전체 재계획 393), standing·작업 시간 장면도 +1~2. Tier 2는 시간 차이 거의 없음.
+- **우리 방법 설정**: `--order fixed-first --reachability --rescue path --tiers 2 --order-restarts 3`.
+- `CLAUDE.md` 추가(Windows·Ubuntu 공용 작업 규칙), `python/_pathsetup.py`가 Ubuntu의 `.so`도 찾게 고침.
+- 3D(일정 7)에서 정할 것(다음 세션에 docs/31로): 칸 크기·스텝 시간(로봇 크기·선속도·회전), 장애물 발견 거리·확인 대기 시간, 실행 계층(Action Dependency Graph),
+  새 계획 적용 시점(current_time = 지금 + k), 위치 추정, 로봇 대수.

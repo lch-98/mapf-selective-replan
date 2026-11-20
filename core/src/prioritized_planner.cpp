@@ -6,6 +6,7 @@
 #include "mapf/prioritized_planner.hpp"
 
 #include <algorithm>
+#include <random>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -684,7 +685,10 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
     }
 
     // 2단계: Tier 0부터 max_escalation_tiers까지, 막은 원인 로봇을 추적해서
-    // working_ids를 넓혀가며 재시도한다(06장 6.6절).
+    // working_ids를 넓혀가며 재시도한다(06장 6.6절). 안전망 ②(order_restarts)가 처음 영향받은 로봇의 순서만 바꿔
+    // 같은 과정을 다시 부를 수 있도록 함수(람다)로 묶었다. 시작 순서만 다르고 내용은 원래와 같다.
+    const std::vector<int> initial_working = working_ids;
+    auto run_tiers = [&](std::vector<int> working_ids) -> std::optional<ReplanResult> {
     std::vector<int> rescued_ids;
     for (int tier = 0; tier <= replan_config_.max_escalation_tiers; ++tier) {
         std::vector<SpaceTimeCell> blocked; // try_replan_set() -> out_blocked (working_ids에 포함된 로봇 경로계획 실패시)
@@ -742,18 +746,41 @@ std::optional<ReplanResult> PrioritizedPlanner::replan(const std::vector<Agent>&
 
         if (!added_any) break;
     }
+    return std::nullopt;
+    };
 
-    // 3단계: 안전망 — 전체 재계획(현재 위치 기준).
+    if (std::optional<ReplanResult> tiered = run_tiers(working_ids)) return tiered;
+
+    // 3단계: 안전망 ① — 전체 재계획(현재 위치 기준).
     std::optional<PlanResult> fallback =
         full_replan(agents, previous_paths, previous_schedule, new_obstacles, current_time);
-    if (!fallback.has_value()) return std::nullopt;
+    if (fallback.has_value()) {
+        ReplanResult result;
+        result.paths = *fallback;
+        for (const Agent& agent : agents) result.replanned_ids.push_back(agent.id);
+        result.escalation_tier = -1;
+        result.schedule = update_schedule(agents, previous_schedule, result.paths, current_time);
+        return result;
+    }
 
-    ReplanResult result;
-    result.paths = *fallback;
-    for (const Agent& agent : agents) result.replanned_ids.push_back(agent.id);
-    result.escalation_tier = -1;
-    result.schedule = update_schedule(agents, previous_schedule, result.paths, current_time);
-    return result;
+    // 안전망 ②(30장): 전체 재계획까지 실패했을 때만, 처음 영향받은 로봇들의 순서를 바꿔 Tier를 다시 해 본다.
+    // 섞기는 std::shuffle 대신 직접 쓴다(std::shuffle은 표준 라이브러리마다 결과가 달라 Windows·Ubuntu 재현이 깨짐).
+    if (replan_config_.order_restarts > 0 && initial_working.size() > 1) {
+        std::mt19937 rng(replan_config_.restart_seed);
+        for (int restart = 1; restart <= replan_config_.order_restarts; ++restart) {
+            std::vector<int> order = initial_working;
+            for (size_t i = order.size() - 1; i > 0; --i) {
+                size_t j = static_cast<size_t>(rng() % static_cast<std::uint32_t>(i + 1));
+                std::swap(order[i], order[j]);
+            }
+            if (std::optional<ReplanResult> retried = run_tiers(order)) {
+                retried->escalation_tier = -1;  // 안전망 단계에서 풀렸다고 센다(사용자 결정 2026-11-20)
+                retried->order_restart = restart;
+                return retried;
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<ReplanResult> PrioritizedPlanner::replan_windowed(const std::vector<Agent>& agents,

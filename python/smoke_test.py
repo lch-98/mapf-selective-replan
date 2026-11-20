@@ -213,6 +213,31 @@ def main() -> None:
     check(all(not (c.x == o.x and c.y == o.y) for p in win.paths.values() for c in p for o in pa_obs),
           "아무도 장애물을 밟지 않음")
 
+    print("[11] 안전망 ②(order_restarts): 전체 재계획까지 실패한 실제 사례가 순서 바꾸기로 풀린다(30장)")
+    import json
+    case = Path(__file__).resolve().parent.parent / "tools" / "results" / "v7_failures" / "st32s0" / "corridor_40_29.json"
+    d = json.loads(case.read_text(encoding="utf-8"))
+    cm = mapf_py.Map(d["map"])
+    ca = [mapf_py.Agent(i, C(sx, sy), C(gx, gy), svc) for i, sx, sy, gx, gy, svc in d["agents"]]
+    cp = {int(k): [ST(x, y, t) for x, y, t in v] for k, v in d["paths"].items()}
+    co = [C(x, y) for x, y in d["obstacles"]]
+    cs = mapf_py.schedule_from_plan(ca, cp)
+
+    def restart_cfg(n):
+        c = mapf_py.ReplanConfig()
+        c.order = mapf_py.ReplanOrder.FIXED_FIRST
+        c.check_reachability = True
+        c.rescue_selection = mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+        c.max_escalation_tiers = 2
+        c.order_restarts = n
+        return c
+
+    off = mapf_py.PrioritizedPlanner(cm, replan_config=restart_cfg(0)).replan(ca, cp, cs, co, d["current_time"])
+    check(off is None, "끔: 전체 재계획까지 실패 → None")
+    on = mapf_py.PrioritizedPlanner(cm, replan_config=restart_cfg(3)).replan(ca, cp, cs, co, d["current_time"])
+    check(on is not None and on.escalation_tier == -1 and 1 <= on.order_restart <= 3,
+          "켬(3번): 순서 바꾸기로 풀림, 안전망 단계로 셈(escalation_tier -1, order_restart 1~3)")
+
     print("\nSMOKE TEST PASSED")
 
 

@@ -90,6 +90,14 @@ struct ReplanConfig {
     // 미룬 로봇은 창 안에 들어올 때 다시 계획한다 — replan_windowed()가 그 시각마다 replan()을 다시 부른다.
     // -1(기본)이면 끔: 경로가 장애물과 겹치는 로봇을 전부 지금 다시 계획한다(원래 동작 그대로).
     int affected_window{-1};
+
+    // 안전망 ②(30장, 2026-11-20): 0보다 크면, Tier와 안전망 ①(전체 재계획)까지 모두 실패했을 때만 "처음 영향받은 로봇들의
+    // 순서"를 바꿔 Tier 0 → max_escalation_tiers를 이 횟수까지 다시 해 본다(고정 로봇은 그대로 고정, 선택성 유지).
+    // PP는 순서에 따라 풀리고 안 풀리므로 순서만 바꿔도 풀리는 경우가 많다(PP 무작위 재시작, 알려진 기법).
+    // 평소(Tier·전체 재계획이 성공하는 경우)에는 실행되지 않으므로 속도에 영향이 없다. 0(기본)이면 끔.
+    int order_restarts{0};
+    // 순서를 바꿀 때 쓰는 난수 씨앗. 같은 값이면 Windows·Ubuntu 어디서나 같은 순서가 나온다(결과 재현).
+    std::uint32_t restart_seed{0};
 };
 
 // replan() 한 번의 결과 — 최종 경로 외에, "얼마나 선택적으로 풀렸는지"를
@@ -102,7 +110,8 @@ struct ReplanResult {
     TaskSchedule schedule{};           // 재계획 후의 근무표(17장 결정 9, update_schedule로 계산)
     std::vector<int> yielded_ids{};    // 비켜 달라고 해서 결과에 쓰인 로봇 id(19장, request_yield일 때만)
     std::vector<int> deferred_ids{};   // affected_window 때문에 이번에 미룬 로봇 id(옛 경로가 아직 장애물을 밟음)
-    std::vector<int> event_times{};    // replan_windowed()에서 replan()을 부른 시각들(첫 값 = current_time)
+    std::vector<int> event_times{};
+    int order_restart{0};              // 안전망 ②로 풀렸으면 몇 번째 순서 바꾸기에서 풀렸는지(1부터). 이때 escalation_tier는 -1    // replan_windowed()에서 replan()을 부른 시각들(첫 값 = current_time)
 };
 
 class PrioritizedPlanner {

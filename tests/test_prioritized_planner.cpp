@@ -1369,3 +1369,49 @@ TEST(SelectiveReplanTest, AffectedWindowOffMeansEveryHitRobotNow) {
     EXPECT_TRUE(result->deferred_ids.empty());
     expect_avoids_obstacles(result->paths, obstacles, 0);
 }
+
+// ───────────────────────────────────────────────────────────────
+// 안전망 ②(30장): order_restarts — 전체 재계획까지 실패했을 때만 처음 영향받은 로봇 순서를 바꿔 다시.
+// 실제로 순서를 바꿔야 풀리는 장면은 파이썬 스모크 [11]에서 저장된 실패 사례(tools/results/v7_failures)로 확인한다.
+// ───────────────────────────────────────────────────────────────
+
+TEST(SelectiveReplanTest, OrderRestartsNeverRunWhenFullReplanSucceeds) {
+    // ShortestPathRescueCallsOnlyAgentsOnTheRoute와 같은 지도, Tier 0만 허용 → W의 A*가 고정된 K 때문에 실패 → 안전망 ①(전체
+    // 재계획)이 K를 비키게 해서 푼다. 안전망 ①이 성공했으므로 안전망 ②는 돌지 않아야 하고, 결과는 끈 경우와 같아야 한다.
+    Map map(std::vector<std::string>{
+        "####.###",
+        ".##...##",
+        "........",
+    });
+    // 우선순위를 W(1) → K(0) → Z(2)로 둔다. 그래야 전체 재계획에서 W가 먼저 지나가고 K가 (4,0)으로 잠깐 비켜 풀린다.
+    std::vector<Agent> agents = {
+        Agent{1, Cell{0, 2}, Cell{6, 2}},
+        Agent{0, Cell{4, 1}, Cell{4, 1}},
+        Agent{2, Cell{0, 1}, Cell{0, 1}},
+    };
+    PlanResult previous_paths;
+    previous_paths[0] = Path{SpaceTimeCell{4, 1, 0}};
+    previous_paths[1] = Path{
+        SpaceTimeCell{0, 2, 0}, SpaceTimeCell{1, 2, 1}, SpaceTimeCell{2, 2, 2},
+        SpaceTimeCell{3, 2, 3}, SpaceTimeCell{4, 2, 4}, SpaceTimeCell{5, 2, 5},
+        SpaceTimeCell{6, 2, 6},
+    };
+    previous_paths[2] = Path{SpaceTimeCell{0, 1, 0}};
+
+    ReplanConfig off;
+    off.order = ReplanOrder::kFixedFirst;
+    off.max_escalation_tiers = 0;
+    ReplanConfig on = off;
+    on.order_restarts = 3;
+
+    PrioritizedPlanner planner_off(map, AStarConfig{}, off);
+    PrioritizedPlanner planner_on(map, AStarConfig{}, on);
+    auto a = planner_off.replan(agents, previous_paths, {Cell{4, 2}}, 3);
+    auto b = planner_on.replan(agents, previous_paths, {Cell{4, 2}}, 3);
+    ASSERT_TRUE(a.has_value());
+    ASSERT_TRUE(b.has_value());
+    EXPECT_EQ(a->escalation_tier, -1);
+    EXPECT_EQ(b->escalation_tier, -1);
+    EXPECT_EQ(b->order_restart, 0);
+    EXPECT_EQ(a->paths, b->paths);
+}

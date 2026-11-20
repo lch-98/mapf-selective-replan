@@ -69,7 +69,8 @@ struct ScenarioResult {
     int obstacle_retries{0};
     int affected_n{0};       // 장애물과 경로가 겹친 로봇 수(우리 Tier 0 대상, 6번 Park식 비교용)
     int hit_offset_max{0};
-    int selective_events{0}; // 방법 B가 replan()을 부른 횟수(--affected-window일 때 미룬 로봇마다 늘어남, 아니면 1)   // 그 로봇들이 장애물 칸에 처음 닿는 시각 - 지금 시각, 의 최댓값(스텝) // 그중 계획은 됐지만 장애물이 아무도 안 막아서(standing: 조건 맞는 로봇 없음) 버린 횟수
+    int selective_events{0};
+    int order_restart{0};    // 안전망 ②(--order-restarts)로 풀렸으면 몇 번째 순서 바꾸기에서(1부터), 아니면 0 // 방법 B가 replan()을 부른 횟수(--affected-window일 때 미룬 로봇마다 늘어남, 아니면 1)   // 그 로봇들이 장애물 칸에 처음 닿는 시각 - 지금 시각, 의 최댓값(스텝) // 그중 계획은 됐지만 장애물이 아무도 안 막아서(standing: 조건 맞는 로봇 없음) 버린 횟수
 
     // 경로 품질(12장). 방법이 실패했으면 -1.
     int initial_soc{-1};               // 초기 계획의 경로 비용 합(도착 시각의 합)
@@ -596,6 +597,7 @@ ScenarioResult run_one_scenario(const Map& map, const std::vector<Agent>& agents
             result.selective_delayed = count_delayed(initial, selective->paths);
             result.selective_rescued = static_cast<int>(selective->rescued_ids.size());
             result.selective_events = selective->event_times.empty() ? 1 : static_cast<int>(selective->event_times.size());
+            result.order_restart = selective->order_restart;
         }
     }
 
@@ -786,7 +788,7 @@ std::string run_task(const Task& task) {
         << "," << r.selective_yielded << "," << r.full_replan_away << "," << r.selective_away << ","
         << r.current_time << "," << r.working_at_t << "," << r.full_replan_delayed << ","
         << r.selective_delayed << "," << r.selective_rescued << "," << r.moving_at_t << "," << r.plan_failures << ","
-        << r.obstacle_retries << "," << r.affected_n << "," << r.hit_offset_max << "," << r.selective_events << "\n";
+        << r.obstacle_retries << "," << r.affected_n << "," << r.hit_offset_max << "," << r.selective_events << "," << r.order_restart << "\n";
     return out.str();
 }
 
@@ -899,6 +901,11 @@ int main(int argc, char** argv) {
                 std::cerr << "--tie-break must be larger-g, smaller-g or random:SEED\n";
                 return 1;
             }
+        } else if (arg == "--order-restarts" && i + 1 < argc) {
+            // 안전망 ②(30장): 전체 재계획까지 실패했을 때만 처음 영향받은 로봇 순서를 바꿔 최대 N번 다시.
+            replan_config.order_restarts = std::atoi(argv[++i]);
+        } else if (arg == "--restart-seed" && i + 1 < argc) {
+            replan_config.restart_seed = static_cast<std::uint32_t>(std::strtoul(argv[++i], nullptr, 10));
         } else if (arg == "--dump-failures" && i + 1 < argc) {
             g_dump_dir = argv[++i];
         } else if (arg == "--affected-window" && i + 1 < argc) {
@@ -918,7 +925,7 @@ int main(int argc, char** argv) {
             }
         } else {
             std::cerr << "usage: run_benchmark [--large | --huge] [--agents a,b,c] [--max-timestep N] [--repeats N] [--tiers K] "
-                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing] [--affected-window W] [--dump-failures DIR]\n";
+                         "[--order priority|fixed-first] [--reachability] [--rescue blocked|path] [--yield] [--yield-min-delay N] [--service LO HI] [--tie-break larger-g|smaller-g|random:SEED] [--threads N] [--obstacle-mode path|standing] [--affected-window W] [--dump-failures DIR] [--order-restarts N] [--restart-seed S]\n";
             return 1;
         }
     }
@@ -1000,7 +1007,7 @@ int main(int argc, char** argv) {
                  "full_replan_soc,full_replan_changed,selective_replan_soc,"
                  "selective_replan_changed,selective_replanned,selective_conflicts,selective_yielded,full_replan_away,selective_away,"
                  "current_time,working_at_t,full_replan_delayed,selective_delayed,selective_rescued,moving_at_t,"
-                 "plan_failures,obstacle_retries,affected_n,hit_offset_max,selective_events\n";
+                 "plan_failures,obstacle_retries,affected_n,hit_offset_max,selective_events,order_restart\n";
     for (const std::string& line : results) std::cout << line;
 
     return 0;

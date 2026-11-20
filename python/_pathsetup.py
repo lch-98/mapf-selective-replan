@@ -12,12 +12,15 @@ from pathlib import Path
 
 def add_mapf_py_to_path() -> None:
     repo_root = Path(__file__).resolve().parent.parent
+    # Windows(Visual Studio)는 build/bindings/Release|Debug/mapf_py*.pyd,
+    # Ubuntu(단일 구성 빌드)는 build/bindings/mapf_py*.so에 만들어진다.
     candidates = [
         repo_root / "build" / "bindings" / "Release",
         repo_root / "build" / "bindings" / "Debug",
+        repo_root / "build" / "bindings",
     ]
     for candidate in candidates:
-        if any(candidate.glob("mapf_py*.pyd")):
+        if any(candidate.glob("mapf_py*.pyd")) or any(candidate.glob("mapf_py*.so")):
             sys.path.insert(0, str(candidate))
             return
     raise ImportError(

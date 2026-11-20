@@ -143,6 +143,11 @@ class ReplanConfig:
     affected_window: int
     """기본값 -1(끔). 0 이상이면 6번 비교 기준 Park식: 지금부터 이 스텝 안에 장애물에 닿는 로봇만 지금 다시
     계획하고, 더 늦게 닿는 로봇은 미룬다(ReplanResult.deferred_ids). replan_windowed()가 창에 들어올 때 다시 계획한다."""
+    order_restarts: int
+    """기본값 0(끔). 안전망 ②(30장): Tier와 전체 재계획이 모두 실패했을 때만, 처음 영향받은 로봇들의 순서를 바꿔
+    Tier를 이 횟수까지 다시 해 본다. 평소에는 실행되지 않아 속도에 영향이 없다."""
+    restart_seed: int
+    """기본값 0. 순서를 바꿀 때 쓰는 난수 씨앗(같은 값이면 어느 OS에서나 같은 순서)."""
 
     def __init__(self) -> None: ...
 
@@ -222,6 +227,9 @@ class ReplanResult:
 
     event_times: List[int]
     """replan_windowed()에서 replan()을 부른 시각들(첫 값 = current_time). replan()에서는 빈 리스트."""
+
+    order_restart: int
+    """안전망 ②로 풀렸으면 몇 번째 순서 바꾸기에서 풀렸는지(1부터), 아니면 0. 이때 escalation_tier는 -1."""
 
 class PrioritizedPlanner:
     """고정 우선순위 계획(Prioritized Planning, PP). 우선순위는 agents 리스트의 순서

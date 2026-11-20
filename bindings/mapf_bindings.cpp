@@ -131,6 +131,8 @@ PYBIND11_MODULE(mapf_py, m) {
         .def_readwrite("request_yield", &ReplanConfig::request_yield)
         .def_readwrite("yield_min_delay", &ReplanConfig::yield_min_delay)
         .def_readwrite("affected_window", &ReplanConfig::affected_window)
+        .def_readwrite("order_restarts", &ReplanConfig::order_restarts)
+        .def_readwrite("restart_seed", &ReplanConfig::restart_seed)
         .def("__repr__", [](const ReplanConfig& c) {
             return std::string("ReplanConfig(max_escalation_tiers=") +
                    std::to_string(c.max_escalation_tiers) + ", order=" +
@@ -142,7 +144,9 @@ PYBIND11_MODULE(mapf_py, m) {
                         : "BLOCKED_CELLS") +
                    ", request_yield=" + (c.request_yield ? "True" : "False") +
                    ", yield_min_delay=" + std::to_string(c.yield_min_delay) +
-                   ", affected_window=" + std::to_string(c.affected_window) + ")";
+                   ", affected_window=" + std::to_string(c.affected_window) +
+                   ", order_restarts=" + std::to_string(c.order_restarts) +
+                   ", restart_seed=" + std::to_string(c.restart_seed) + ")";
         });
 
     // ── 근무표 (TaskWindow, TaskState, 근무표 함수) ───────────────
@@ -182,7 +186,8 @@ PYBIND11_MODULE(mapf_py, m) {
         .def_readonly("schedule", &ReplanResult::schedule)
         .def_readonly("yielded_ids", &ReplanResult::yielded_ids)
         .def_readonly("deferred_ids", &ReplanResult::deferred_ids)
-        .def_readonly("event_times", &ReplanResult::event_times);
+        .def_readonly("event_times", &ReplanResult::event_times)
+        .def_readonly("order_restart", &ReplanResult::order_restart);
 
     // ── PrioritizedPlanner ─────────────────────────────────────────────────────
     // PrioritizedPlanner는 생성자 인자로 받은 const Map&를 멤버로 그대로 저장한다(복사가
