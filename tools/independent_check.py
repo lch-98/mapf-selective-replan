@@ -102,9 +102,12 @@ def make_scenario(game_map, n, rng):
 def config(method):
     cfg = mapf_py.ReplanConfig()
     if method == "ours":
+        # 2026-11-20부터 우리 방법 = Tier 2 + 안전망 ②(30장 30.6). 그 전 검사 결과(118/120 등)는 Tier 1 기준.
         cfg.order = mapf_py.ReplanOrder.FIXED_FIRST
         cfg.check_reachability = True
         cfg.rescue_selection = mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+        cfg.max_escalation_tiers = 2
+        cfg.order_restarts = 3
     return cfg
 
 

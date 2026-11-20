@@ -54,12 +54,15 @@ def parse_args() -> argparse.Namespace:
 
 def make_replan_config(method: str) -> "mapf_py.ReplanConfig":
     """오른쪽 패널의 재계획 설정. ours는 벤치마크의 우리 방법
-    (--order fixed-first --reachability --rescue path)과 같다. legacy는 기본값(원래 방식)."""
+    (--order fixed-first --reachability --rescue path --tiers 2 --order-restarts 3, 30장 30.6)과 같다.
+    legacy는 기본값(원래 방식: 섞어 등록, 도달 확인 없음, 막혀 본 칸 전부 구조, Tier 1, 안전망 ② 없음)."""
     config = mapf_py.ReplanConfig()
     if method == "ours":
         config.order = mapf_py.ReplanOrder.FIXED_FIRST
         config.check_reachability = True
         config.rescue_selection = mapf_py.RescueSelection.SHORTEST_PATH_CONFLICTS
+        config.max_escalation_tiers = 2
+        config.order_restarts = 3
     return config
 
 

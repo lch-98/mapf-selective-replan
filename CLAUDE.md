@@ -12,7 +12,12 @@
 - 엔진은 **PP**다. **PBS가 아니다**(진짜 PBS = Ma et al. 2019, 순서를 탐색하는 다른 방법). 코드 이름 `PrioritizedPlanner`.
 - 우리 방법 = Tier 0(영향받은 로봇만) + ① 고정 먼저 + ② 도달 확인 + ③ 길 위 로봇 구조(Tier 1~2) + 안전망.
   - 안전망 ① 전체 재계획, 안전망 ② 전체 재계획까지 실패하면 처음 영향받은 로봇 순서를 바꿔 다시(최대 3번, 30장).
-  - 벤치마크 옵션: `--order fixed-first --reachability --rescue path --tiers 2 --order-restarts 3`
+  - 벤치마크 옵션: `--order fixed-first --reachability --rescue path --tiers 2 --order-restarts 3` (모든 옵션 목록: `docs/OPTIONS.md`)
+- 실행 순서: Tier 0 → Tier 1 → Tier 2 → 안전망 ①(전체 재계획) → 안전망 ②(처음 영향받은 로봇 순서만 바꿔 Tier 0~2를 다시, 최대 3번).
+  (2026-11-20 전 우리 방법 실험도 ①②③은 켜져 있었고, 단계만 Tier 0 → Tier 1 → 안전망 ①이었다. 11-20에 Tier 2와 안전망 ②만 더함.
+  "원래 방식"(legacy, 코드 기본값)은 ①②③이 모두 꺼진 Tier 0 → Tier 1 → 안전망 ①.)
+- 엔진 고정 설정(논문 실험 조건에 반드시 적을 것): A\* 동점 규칙 = f 작은 쪽 → g 큰 쪽 → 먼저 넣은 쪽(`--tie-break larger-g`, 기본값),
+  `max_timestep` 256(128×128은 512). 동점 규칙을 바꿔도 결론 유지(21장 21.8).
 - "스스로 푼 수" = 안전망(①②) 없이 Tier 0~2에서 푼 수. 작업 시간(service time): 도착 후 작업 중인 로봇은 절대 안 움직임.
 - 예전 문서의 "PIEF"는 잘못된 이름 → Švancara 2019의 **OID**.
 

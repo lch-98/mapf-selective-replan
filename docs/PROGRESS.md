@@ -805,3 +805,6 @@ A* 수정 후 32x32 벤치마크는 두 방법 모두 성공률이 거의 100%�
 - `CLAUDE.md` 추가(Windows·Ubuntu 공용 작업 규칙), `python/_pathsetup.py`가 Ubuntu의 `.so`도 찾게 고침.
 - 3D(일정 7)에서 정할 것(다음 세션에 docs/31로): 칸 크기·스텝 시간(로봇 크기·선속도·회전), 장애물 발견 거리·확인 대기 시간, 실행 계층(Action Dependency Graph),
   새 계획 적용 시점(current_time = 지금 + k), 위치 추정, 로봇 대수.
+- 시간 확인(30.7, `--threads 1`): 64×64·128×128, 넓은 맵·좁은 통로, 최대 500대에서 예전 설정과 계산 시간 차이 없음(달라진 시나리오 900개 중 2개).
+- `docs/OPTIONS.md`: 켜고 끌 수 있는 옵션 전체 목록(원래 방식 / 우리 방법 11-20 이전 / 지금). GUI `--method ours`와 `tools/independent_check.py`도 지금 설정으로 맞춤.
+  CLAUDE.md에 실행 순서와 엔진 고정 설정(A\* 동점 규칙) 추가.
