@@ -271,3 +271,5 @@ A\*가 실패하면 실패한 로봇의 "로봇 없을 때 가장 짧은 길"(BF
 Veerapaneni 2025(WinC-MAPF), Semiz & Polat 2021(증분 MAPF), Incremental CBS 2024, Doğru 2025(다층 방식, scitepress PDF),
 에너지 제약 하이브리드 수리(Electronics 2026), When Agents Break Down in MAPF(arXiv 2508.03777), RHCR(Li 2021),
 작업 시간 추가 검색: MAPD with service/operation time, AGV station dwell time + online replanning.
+(2026-11-25 추가, 3D 실행 관련 — 31.14) Analyzing Planner Design Trade-offs for MAPF under ADG-based Realistic Execution(arXiv 2512.09736),
+Should I Replan? Learning to Spot the Right Time in Robust MAPF Execution(arXiv 2604.25567) — 31.6(번호 다시 붙이기)이 이미 있는 방법인지 확인.

@@ -22,6 +22,12 @@ file(GLOB MAPF_CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 add_library(mapf_core ${MAPF_CORE_SOURCES})
 
+# Linux(gcc)에서는 정적 라이브러리를 공유 라이브러리(파이썬 모듈 mapf_py.so,
+#   나중의 ROS2 노드 등) 안에 넣으려면 -fPIC로 컴파일해야 한다. 안 그러면
+#   "recompile with -fPIC" 링크 오류가 난다. Windows(MSVC)에는 영향이 없다.
+#   코드 생성 방식만 바뀌고 계산 결과는 그대로다.
+set_target_properties(mapf_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # target_include_directories: "mapf_core를 쓰는 쪽(또는 mapf_core 자신)이
 #   #include 할 때, core/include 폴더를 기준으로 찾게 해라."
 #   PUBLIC: 이 라이브러리를 가져다 쓰는 다른 타겟(tests 등)도 이 경로를
