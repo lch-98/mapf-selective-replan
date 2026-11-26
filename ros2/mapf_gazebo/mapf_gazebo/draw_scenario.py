@@ -1,4 +1,4 @@
-"""시나리오를 2D GUI와 같은 방향(0번 줄이 위)으로 그린다 — Gazebo 화면(위에서 본 모습)과 눈으로 맞대 보는 용도 (7-1).
+"""시나리오를 2D GUI와 같은 방향(0행이 위)으로 그린다 — Gazebo 화면(위에서 본 모습)과 눈으로 맞대 보는 용도 (7-1).
 
     ros2 run mapf_gazebo draw_scenario corridor10_r6_s1 --out corridor10_r6_s1.png
 
@@ -39,10 +39,13 @@ def draw(sc, out):
         ax.add_patch(Rectangle((gx - 0.3, gy - 0.3), 0.6, 0.6, fill=False, edgecolor=c, lw=2.5))
         ax.text(gx, gy, str(r['id'] + 1), ha='center', va='center', color=c, fontsize=9, weight='bold')
     ax.set_xlim(0, w)
-    ax.set_ylim(h, 0)  # 0번 줄이 위 (2D GUI와 같음)
+    ax.set_ylim(h, 0)  # 0행이 위 (2D GUI와 같음)
     ax.set_aspect('equal')
-    ax.set_xticks(range(w))
-    ax.set_yticks(range(h))
+    ax.set_xticks([i + 0.5 for i in range(w)], [str(i) for i in range(w)])  # 번호는 칸 가운데에
+    ax.set_yticks([i + 0.5 for i in range(h)], [str(i) for i in range(h)])
+    ax.tick_params(length=0)
+    ax.set_xlabel('열 (x)')
+    ax.set_ylabel('행 (y)')
     ax.set_title(f"{sc['name']}  (동그라미=출발, 네모=목적지, 화살표=처음 방향)", fontsize=9)
     fig.tight_layout()
     fig.savefig(out, dpi=110)

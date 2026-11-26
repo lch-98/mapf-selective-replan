@@ -33,7 +33,7 @@ ros2 run turtlebot3_teleop teleop_keyboard --ros-args -r __ns:=/robot_1
 ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1 gui:=true
 # 터미널 2: 자동 점검 (출발 위치, LiDAR 실제 거리 ↔ 격자 계산 거리, RTF)
 ros2 run mapf_gazebo check_7_1 --scenario corridor10_r6_s1
-# 2D 그림(0번 줄이 위) — gui:=true 화면(처음부터 위에서 내려다봄, 위 = 북 = +y)과 같은 모양이어야 함
+# 2D 그림(0행   이 위) — gui:=true 화면(처음부터 위에서 내려다봄, 위 = 북 = +y)과 같은 모양이어야 함
 ros2 run mapf_gazebo draw_scenario corridor10_r6_s1 --out corridor.png
 # 새 시나리오 만들기 (먼저 저장소 최상위에서 코어 빌드 필요: mapf_py)
 ros2 run mapf_gazebo make_scenario --map corridor --size 10 --robots 6 --seed 2 --out my.json

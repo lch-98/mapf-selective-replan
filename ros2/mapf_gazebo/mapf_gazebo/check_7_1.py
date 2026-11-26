@@ -153,7 +153,7 @@ def main():
         res['robots'][n] = {'start_cell': r['start'], 'pos_err_m': dpos, 'yaw_err_deg': dyaw, 'P_ok': p_ok,
                             'lidar_agree': rate, 'lidar_rays': used, 'lidar_median_err_m': med, 'lidar_bad_examples': bad,
                             'L_ok': l_ok}
-        print(f"  {n} 칸{tuple(r['start'])}: [{'통과' if p_ok else '실패'}] P 위치 차이 {dpos * 100:.1f} cm, 방향 {dyaw:.1f}°"
+        print(f"  {n} 출발 {r['start'][1]}행 {r['start'][0]}열: [{'통과' if p_ok else '실패'}] P 위치 차이 {dpos * 100:.1f} cm, 방향 {dyaw:.1f}°"
               f"   [{'통과' if l_ok else '실패'}] L LiDAR {rate * 100:.1f}% 일치({used}개 광선, 차이 중앙값 "
               f"{(med or 0) * 100:.1f} cm){'' if l_ok else f', 안 맞은 예(각도°, 실제, 격자) {bad}'}")
 

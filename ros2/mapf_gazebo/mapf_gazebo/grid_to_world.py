@@ -35,7 +35,7 @@ def world_xml(scenario, flip_y=True):
                     for i, b in enumerate(wall_boxes(len(rows[0]), len(rows), cell)))
     shelf_model = (f'<model name="shelves"><static>true</static><link name="link">{shelves}</link></model>'
                    if shelves else '')
-    # 화면(gzclient)을 처음부터 "위에서 내려다보고, 화면 위 = +y(북), 오른쪽 = +x"로 연다 → 2D 그림(0번 줄이 위)과 같은 모양.
+    # 화면(gzclient)을 처음부터 "위에서 내려다보고, 화면 위 = +y(북), 오른쪽 = +x"로 연다 → 2D 그림(0행이 위)과 같은 모양.
     # 이게 없으면 Gazebo 기본 카메라 방향이라 지도가 90° 돌아가 보인다(2026-11-26 사용자 확인).
     # 자세: yaw 90°(카메라 앞 = +y) 뒤 pitch 90° 가까이(아래를 봄) → 화면 위 = +y. pitch를 정확히 90°로 두면 orbit 조작이 튀어서 살짝 덜 숙인다.
     wm, hm = len(rows[0]) * cell, len(rows) * cell
