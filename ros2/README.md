@@ -33,7 +33,7 @@ ros2 run turtlebot3_teleop teleop_keyboard --ros-args -r __ns:=/robot_1
 ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1 gui:=true
 # 터미널 2: 자동 점검 (출발 위치, LiDAR 실제 거리 ↔ 격자 계산 거리, RTF)
 ros2 run mapf_gazebo check_7_1 --scenario corridor10_r6_s1
-# 2D 그림(0번 줄이 위) — Gazebo 화면을 위에서 본 모습과 같아야 함
+# 2D 그림(0번 줄이 위) — gui:=true 화면(처음부터 위에서 내려다봄, 위 = 북 = +y)과 같은 모양이어야 함
 ros2 run mapf_gazebo draw_scenario corridor10_r6_s1 --out corridor.png
 # 새 시나리오 만들기 (먼저 저장소 최상위에서 코어 빌드 필요: mapf_py)
 ros2 run mapf_gazebo make_scenario --map corridor --size 10 --robots 6 --seed 2 --out my.json
@@ -41,3 +41,4 @@ ros2 run mapf_gazebo make_scenario --map corridor --size 10 --robots 6 --seed 2 
 python3 -m pytest mapf_gazebo/test -q
 ```
 결과: `results/7_1/`, 해석: docs/31 31.20. 시나리오 형식: 31.19.
+월드(.world)는 띄울 때마다 시나리오 JSON에서 새로 만든다(JSON 하나만 원본). 파일로 필요하면 `ros2 run mapf_gazebo grid_to_world 시나리오.json --out x.world`.
