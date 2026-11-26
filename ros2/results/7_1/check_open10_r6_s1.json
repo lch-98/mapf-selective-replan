@@ -1,0 +1,91 @@
+{
+  "scenario": "open10_r6_s1",
+  "robots": {
+    "robot_1": {
+      "start_cell": [
+        2,
+        2
+      ],
+      "pos_err_m": 5.308833409561507e-05,
+      "yaw_err_deg": 0.00011373111949057043,
+      "P_ok": true,
+      "lidar_agree": 1.0,
+      "lidar_rays": 312,
+      "lidar_median_err_m": 0.005971932124287593,
+      "lidar_bad_examples": [],
+      "L_ok": true
+    },
+    "robot_2": {
+      "start_cell": [
+        1,
+        0
+      ],
+      "pos_err_m": 6.424873269821862e-05,
+      "yaw_err_deg": 0.00013687525514569245,
+      "P_ok": true,
+      "lidar_agree": 1.0,
+      "lidar_rays": 336,
+      "lidar_median_err_m": 0.007569280741015649,
+      "lidar_bad_examples": [],
+      "L_ok": true
+    },
+    "robot_3": {
+      "start_cell": [
+        3,
+        9
+      ],
+      "pos_err_m": 5.9385582784098996e-05,
+      "yaw_err_deg": 0.00012139010298985326,
+      "P_ok": true,
+      "lidar_agree": 1.0,
+      "lidar_rays": 341,
+      "lidar_median_err_m": 0.006795293156133697,
+      "lidar_bad_examples": [],
+      "L_ok": true
+    },
+    "robot_4": {
+      "start_cell": [
+        8,
+        5
+      ],
+      "pos_err_m": 4.773306882515087e-05,
+      "yaw_err_deg": 5.044272183214085e-05,
+      "P_ok": true,
+      "lidar_agree": 1.0,
+      "lidar_rays": 347,
+      "lidar_median_err_m": 0.0065239226087814295,
+      "lidar_bad_examples": [],
+      "L_ok": true
+    },
+    "robot_5": {
+      "start_cell": [
+        0,
+        4
+      ],
+      "pos_err_m": 5.1762046880606436e-05,
+      "yaw_err_deg": 0.00010050416841701517,
+      "P_ok": true,
+      "lidar_agree": 1.0,
+      "lidar_rays": 323,
+      "lidar_median_err_m": 0.006390717520971229,
+      "lidar_bad_examples": [],
+      "L_ok": true
+    },
+    "robot_6": {
+      "start_cell": [
+        3,
+        5
+      ],
+      "pos_err_m": 6.85110467644306e-05,
+      "yaw_err_deg": 0.000118012071005782,
+      "P_ok": true,
+      "lidar_agree": 1.0,
+      "lidar_rays": 320,
+      "lidar_median_err_m": 0.005807057408192762,
+      "lidar_bad_examples": [],
+      "L_ok": true
+    }
+  },
+  "rtf_idle": 1.0069511685575026,
+  "all_ok": true
+}

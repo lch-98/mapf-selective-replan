@@ -11,7 +11,7 @@ source install/setup.bash
 
 | 패키지 | 내용 | 상태 |
 |---|---|---|
-| `mapf_gazebo` | TurtleBot3 N대 launch(`multi_tb3.launch.py`), 월드, 점검·시나리오 스크립트 | 7-0 |
+| `mapf_gazebo` | TurtleBot3 N대 launch, 시나리오 JSON → 월드, 점검·시나리오 스크립트 | 7-0, 7-1 |
 | `mapf_exec`, `mapf_ros_msgs`, `mapf_ros` | ADG·번호 다시 붙이기·검사(ROS 모름) / 메시지 / 노드 | 예정(7-2~) |
 
 ## 7-0 환경 점검
@@ -25,3 +25,19 @@ ros2 run mapf_gazebo check_7_0 --num-robots 6 --out result.json
 ros2 run turtlebot3_teleop teleop_keyboard --ros-args -r __ns:=/robot_1
 ```
 결과: `results/7_0/`, 해석: docs/31 31.18.
+
+## 7-1 시나리오대로 띄우기
+
+```
+# 터미널 1: 시나리오 JSON(패키지 scenarios/ 안 이름 또는 파일 경로)대로 월드를 만들고 출발 칸에 6대
+ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1 gui:=true
+# 터미널 2: 자동 점검 (출발 위치, LiDAR 실제 거리 ↔ 격자 계산 거리, RTF)
+ros2 run mapf_gazebo check_7_1 --scenario corridor10_r6_s1
+# 2D 그림(0번 줄이 위) — Gazebo 화면을 위에서 본 모습과 같아야 함
+ros2 run mapf_gazebo draw_scenario corridor10_r6_s1 --out corridor.png
+# 새 시나리오 만들기 (먼저 저장소 최상위에서 코어 빌드 필요: mapf_py)
+ros2 run mapf_gazebo make_scenario --map corridor --size 10 --robots 6 --seed 2 --out my.json
+# 단위 테스트
+python3 -m pytest mapf_gazebo/test -q
+```
+결과: `results/7_1/`, 해석: docs/31 31.20. 시나리오 형식: 31.19.

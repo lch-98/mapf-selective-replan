@@ -13,12 +13,17 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/worlds', glob('worlds/*.world')),
+        ('share/' + package_name + '/scenarios', glob('scenarios/*.json')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     entry_points={
         'console_scripts': [
             'check_7_0 = mapf_gazebo.check_7_0:main',
+            'check_7_1 = mapf_gazebo.check_7_1:main',
+            'make_scenario = mapf_gazebo.make_scenario:main',
+            'grid_to_world = mapf_gazebo.grid_to_world:main',
+            'draw_scenario = mapf_gazebo.draw_scenario:main',
         ],
     },
 )

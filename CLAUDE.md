@@ -49,9 +49,9 @@ python3 python/smoke_test.py
 ```
 (Ubuntu에서는 실행 파일 경로에 `Release/`가 없다. 파이썬 모듈은 `build/bindings/mapf_py*.so` — `python/_pathsetup.py`가 찾는다.)
 3D(Ubuntu 전용, `ros2/README.md`): `cd ros2 && source /opt/ros/humble/setup.bash && colcon build --symlink-install && source install/setup.bash`,
-`ros2 launch mapf_gazebo multi_tb3.launch.py num_robots:=6`(화면은 `gui:=true`). Gazebo를 끌 때 `pkill -f "ros2 launch ..."`는 그 문자열이 든 셸 자신도 끄므로
+`ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1`(화면은 `gui:=true`, 시나리오 JSON 형식은 31.19). Gazebo를 끌 때 `pkill -f "ros2 launch ..."`는 그 문자열이 든 셸 자신도 끄므로
 `pkill -INT -f "[r]os2 launch mapf_gazebo"`처럼 쓴다.
 
 ## 지금 위치 (2026-11-26)
 일정 1~6 완료(6번 나머지 6″은 9번 직전). 다음은 **일정 7: ROS2 + Gazebo 3D** — `docs/31_3d_gazebo_design.md`(2026-11-25): 실행은 ADG,
-재계획은 "지금 모습 = 새 0번" + 약속을 지키는 번호 다시 붙이기(31.6), 기본 6대. 31.13 확정(2026-11-26, 바닥 크기만 미정), 안전은 세 겹(31.4). **7-0 완료(31.18), 다음은 7-1**(작업 순서 7-0~7-6과 단계별 "끝났다" 기준 = **31.12**).
+재계획은 "지금 모습 = 새 0번" + 약속을 지키는 번호 다시 붙이기(31.6), 기본 6대. 31.13 확정(2026-11-26, 바닥 크기만 미정), 안전은 세 겹(31.4). **7-0·7-1 완료(31.18·31.20), 다음은 7-2**(작업 순서 7-0~7-6과 단계별 "끝났다" 기준 = **31.12**).
