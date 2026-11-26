@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mapf_ros</name>
+  <version>0.1.0</version>
+  <description>MAPF 실행 노드: cell_follower(돌고-가기), 이후 mapf_executive (docs/31 31.2, 31.7)</description>
+  <maintainer email="noreply@example.com">lch-98</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>mapf_ros_msgs</depend>
+  <depend>mapf_exec</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

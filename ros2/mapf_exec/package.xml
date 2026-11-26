@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mapf_exec</name>
+  <version>0.1.0</version>
+  <description>ROS를 모르는 실행 계층 라이브러리: 칸↔미터, 계획 검사, 몸 검사, 돌고-가기 제어, 주행 기록 분석 (docs/31 31.2, 31.4, 31.7)</description>
+  <maintainer email="noreply@example.com">lch-98</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -12,7 +12,9 @@ source install/setup.bash
 | 패키지 | 내용 | 상태 |
 |---|---|---|
 | `mapf_gazebo` | TurtleBot3 N대 launch, 시나리오 JSON → 월드, 점검·시나리오 스크립트 | 7-0, 7-1 |
-| `mapf_exec`, `mapf_ros_msgs`, `mapf_ros` | ADG·번호 다시 붙이기·검사(ROS 모름) / 메시지 / 노드 | 예정(7-2~) |
+| `mapf_exec` | ROS 모르는 C++: 칸↔미터, 계획 검사, 몸 검사, 돌고-가기 계산, 기록 분석기 `analyze_run` (이후 ADG·번호 다시 붙이기) | 7-2 |
+| `mapf_ros_msgs` | `ActionCommand`, `ActionStatus` | 7-2 |
+| `mapf_ros` | `cell_follower`(돌고-가기 노드), 이후 `mapf_executive` | 7-2 |
 
 ## 7-0 환경 점검
 
@@ -42,3 +44,16 @@ python3 -m pytest mapf_gazebo/test -q
 ```
 결과: `results/7_1/`, 해석: docs/31 31.20. 시나리오 형식: 31.19.
 월드(.world)는 띄울 때마다 시나리오 JSON에서 새로 만든다(JSON 하나만 원본). 파일로 필요하면 `ros2 run mapf_gazebo grid_to_world 시나리오.json --out x.world`.
+
+## 7-2 한 대 주행 시험
+
+```
+# 터미널 1: 한 대짜리 시험 시나리오 (slow = 0.12 m/s, fast = 0.22 m/s). cell_follower가 같이 뜬다
+ros2 launch mapf_gazebo scenario.launch.py scenario:=follow_corridor10_slow gui:=true
+# 터미널 2: 손 경로 30동작을 보내고 기록·분석 (약 3분)
+ros2 run mapf_gazebo run_7_2 --scenario follow_corridor10_slow --out-dir my_run
+ros2 run mapf_gazebo plot_run --scenario follow_corridor10_slow --log my_run/run.csv --out my_run/track.png
+# 단위 테스트 (mapf_exec)
+./build/mapf_exec/test_mapf_exec
+```
+결과: `results/7_2/`, 해석: docs/31 31.21.

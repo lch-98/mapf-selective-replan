@@ -52,9 +52,9 @@ python3 python/smoke_test.py
 (Ubuntu에서는 실행 파일 경로에 `Release/`가 없다. 파이썬 모듈은 `build/bindings/mapf_py*.so` — `python/_pathsetup.py`가 찾는다.)
 3D(Ubuntu 전용, `ros2/README.md`): `cd ros2 && source /opt/ros/humble/setup.bash && colcon build --symlink-install && source install/setup.bash`,
 `ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1`(화면은 `gui:=true`, 시나리오 JSON 형식은 31.19). **AI가 Gazebo를 띄우고 끌 때**: 먼저 `ps`로 사용자가 띄워 둔 Gazebo가 있는지 확인한다(있으면 같은 월드로 착각한 점검이 돌고, 새 gzserver는 죽는다 —
-2026-11-26 실제로 겪음). 끌 때는 **자기가 띄운 launch의 PID로만** `kill -INT <PID>` 한다. `pkill -f "ros2 launch mapf_gazebo"`는 사용자의 Gazebo까지 끄고,
+2026-11-26 실제로 겪음). 끌 때는 **자기가 띄운 launch의 PID로만** `kill -INT <PID>` 한다(띄울 때 `bash -c 'echo $$ > pidfile; exec ros2 launch ...'`로 PID를 적어 둠, 확인은 `pgrep -xa gzserver`). `pkill -f "ros2 launch mapf_gazebo"`는 사용자의 Gazebo까지 끄고,
 패턴이 든 셸 자신도 끈다.
 
 ## 지금 위치 (2026-11-26)
 일정 1~6 완료(6번 나머지 6″은 9번 직전). 다음은 **일정 7: ROS2 + Gazebo 3D** — `docs/31_3d_gazebo_design.md`(2026-11-25): 실행은 ADG,
-재계획은 "지금 모습 = 새 0번" + 약속을 지키는 번호 다시 붙이기(31.6), 기본 6대. 31.13 확정(2026-11-26, 바닥 크기만 미정), 안전은 세 겹(31.4). **7-0·7-1 완료(31.18·31.20), 다음은 7-2**(작업 순서 7-0~7-6과 단계별 "끝났다" 기준 = **31.12**).
+재계획은 "지금 모습 = 새 0번" + 약속을 지키는 번호 다시 붙이기(31.6), 기본 6대. 31.13 확정(2026-11-26, 바닥 크기만 미정), 안전은 세 겹(31.4). **7-0·7-1·7-2 완료(31.18·31.20·31.21), 다음은 7-3**(작업 순서 7-0~7-6과 단계별 "끝났다" 기준 = **31.12**).

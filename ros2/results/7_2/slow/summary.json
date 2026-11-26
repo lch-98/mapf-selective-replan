@@ -1,0 +1,448 @@
+{
+ "scenario": "follow_corridor10_slow",
+ "max_linear": 0.12,
+ "max_angular": 0.8,
+ "actions_done": 30,
+ "actions_total": 30,
+ "max_arrive_err_m": 0.004379387524982667,
+ "mean_arrive_err_m": 0.003296897096195461,
+ "sim_seconds": 170.272,
+ "analysis": {
+  "samples": 5009,
+  "escape_samples": 0,
+  "max_escape_m": 0.0,
+  "max_cross_m": 0.0048,
+  "max_overshoot_m": 0.0,
+  "shelf_or_wall_overlap_samples": 0
+ },
+ "steps": [
+  {
+   "seq": 0,
+   "from": [
+    0,
+    9
+   ],
+   "to": [
+    1,
+    9
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003084406294430672
+  },
+  {
+   "seq": 1,
+   "from": [
+    1,
+    9
+   ],
+   "to": [
+    2,
+    9
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003008057750846041
+  },
+  {
+   "seq": 2,
+   "from": [
+    2,
+    9
+   ],
+   "to": [
+    3,
+    9
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0029848933176263455
+  },
+  {
+   "seq": 3,
+   "from": [
+    3,
+    9
+   ],
+   "to": [
+    4,
+    9
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003093260720336955
+  },
+  {
+   "seq": 4,
+   "from": [
+    4,
+    9
+   ],
+   "to": [
+    5,
+    9
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003100831032525445
+  },
+  {
+   "seq": 5,
+   "from": [
+    5,
+    9
+   ],
+   "to": [
+    5,
+    8
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0036146624170209376
+  },
+  {
+   "seq": 6,
+   "from": [
+    5,
+    8
+   ],
+   "to": [
+    5,
+    7
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003423709770243328
+  },
+  {
+   "seq": 7,
+   "from": [
+    5,
+    7
+   ],
+   "to": [
+    5,
+    6
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0032364807357669477
+  },
+  {
+   "seq": 8,
+   "from": [
+    5,
+    6
+   ],
+   "to": [
+    5,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003057733214448664
+  },
+  {
+   "seq": 9,
+   "from": [
+    5,
+    5
+   ],
+   "to": [
+    6,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003310471339650219
+  },
+  {
+   "seq": 10,
+   "from": [
+    6,
+    5
+   ],
+   "to": [
+    7,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003165519309168562
+  },
+  {
+   "seq": 11,
+   "from": [
+    7,
+    5
+   ],
+   "to": [
+    8,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003028076466804725
+  },
+  {
+   "seq": 12,
+   "from": [
+    8,
+    5
+   ],
+   "to": [
+    9,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0029888919915544627
+  },
+  {
+   "seq": 13,
+   "from": [
+    9,
+    5
+   ],
+   "to": [
+    9,
+    5
+   ],
+   "kind": "WAIT",
+   "state": "DONE",
+   "arrive_err_m": 0.0
+  },
+  {
+   "seq": 14,
+   "from": [
+    9,
+    5
+   ],
+   "to": [
+    8,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.004114486283387714
+  },
+  {
+   "seq": 15,
+   "from": [
+    8,
+    5
+   ],
+   "to": [
+    7,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0033687844326947187
+  },
+  {
+   "seq": 16,
+   "from": [
+    7,
+    5
+   ],
+   "to": [
+    6,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0030904789306987913
+  },
+  {
+   "seq": 17,
+   "from": [
+    6,
+    5
+   ],
+   "to": [
+    5,
+    5
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0031215160558370455
+  },
+  {
+   "seq": 18,
+   "from": [
+    5,
+    5
+   ],
+   "to": [
+    5,
+    4
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0034543355516759955
+  },
+  {
+   "seq": 19,
+   "from": [
+    5,
+    4
+   ],
+   "to": [
+    5,
+    3
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0032928915764926727
+  },
+  {
+   "seq": 20,
+   "from": [
+    5,
+    3
+   ],
+   "to": [
+    5,
+    2
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003095132675168563
+  },
+  {
+   "seq": 21,
+   "from": [
+    5,
+    2
+   ],
+   "to": [
+    5,
+    1
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003035611815229779
+  },
+  {
+   "seq": 22,
+   "from": [
+    5,
+    1
+   ],
+   "to": [
+    4,
+    1
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0036336261446261535
+  },
+  {
+   "seq": 23,
+   "from": [
+    4,
+    1
+   ],
+   "to": [
+    3,
+    1
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.004379387524982667
+  },
+  {
+   "seq": 24,
+   "from": [
+    3,
+    1
+   ],
+   "to": [
+    2,
+    1
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003386793896265116
+  },
+  {
+   "seq": 25,
+   "from": [
+    2,
+    1
+   ],
+   "to": [
+    1,
+    1
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.003128411464474795
+  },
+  {
+   "seq": 26,
+   "from": [
+    1,
+    1
+   ],
+   "to": [
+    1,
+    2
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0036301344865880283
+  },
+  {
+   "seq": 27,
+   "from": [
+    1,
+    2
+   ],
+   "to": [
+    1,
+    3
+   ],
+   "kind": "MOVE",
+   "state": "DONE",
+   "arrive_err_m": 0.0031876363987320953
+  },
+  {
+   "seq": 28,
+   "from": [
+    1,
+    3
+   ],
+   "to": [
+    1,
+    3
+   ],
+   "kind": "WAIT",
+   "state": "DONE",
+   "arrive_err_m": 0.0
+  },
+  {
+   "seq": 29,
+   "from": [
+    1,
+    3
+   ],
+   "to": [
+    1,
+    3
+   ],
+   "kind": "WAIT",
+   "state": "DONE",
+   "arrive_err_m": 0.0
+  }
+ ],
+ "checks": {
+  "모든 동작 DONE": true,
+  "도착 오차 < 3 cm": true,
+  "칸 이탈 0": true,
+  "추종 오차 < 0.11 m": true,
+  "선반/벽 겹침 0": true
+ },
+ "all_ok": true
+}
