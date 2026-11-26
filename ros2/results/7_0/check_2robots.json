@@ -1,0 +1,76 @@
+{
+  "num_robots": 2,
+  "A_topics": {
+    "ok": true,
+    "missing": [],
+    "unnamespaced": []
+  },
+  "B_tf": {
+    "ok": true,
+    "lacking": [],
+    "bad_names": [],
+    "frames": [
+      "robot_1/base_footprint",
+      "robot_1/base_link",
+      "robot_1/base_scan",
+      "robot_1/caster_back_link",
+      "robot_1/imu_link",
+      "robot_1/odom",
+      "robot_1/wheel_left_link",
+      "robot_1/wheel_right_link",
+      "robot_2/base_footprint",
+      "robot_2/base_link",
+      "robot_2/base_scan",
+      "robot_2/caster_back_link",
+      "robot_2/imu_link",
+      "robot_2/odom",
+      "robot_2/wheel_left_link",
+      "robot_2/wheel_right_link"
+    ]
+  },
+  "C_separate": {
+    "ok": true,
+    "robot1_cmd": {
+      "1": [
+        0.45389875109684585,
+        0.0001803800964802103
+      ],
+      "2": [
+        7.495972502941898e-06,
+        7.574023361852035e-05
+      ]
+    },
+    "robot2_cmd": {
+      "1": [
+        1.1516206588633087e-05,
+        0.000497826056383087
+      ],
+      "2": [
+        0.002491100055325133,
+        91.80237945015895
+      ]
+    }
+  },
+  "D_odom": {
+    "ok": true,
+    "pos_err_m": 3.702092617355581e-05,
+    "yaw_err_deg": 0.037067263725083496,
+    "approx_travel_m": 2.4,
+    "odom_start": [
+      0.45396694559090617,
+      -1.2250887005369287e-05,
+      7.687549522818574e-06
+    ],
+    "gt_start": [
+      0.4539668959069142,
+      -1.22515089368972e-05,
+      7.694081360211462e-06
+    ],
+    "odom_vs_world_origin_gap_m": 4.9687884413708465e-08
+  },
+  "E_rtf": {
+    "idle": 0.9922604829753962,
+    "all_rotating": 0.9988276303970911
+  },
+  "all_ok": true
+}

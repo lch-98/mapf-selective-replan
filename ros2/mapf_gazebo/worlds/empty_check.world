@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  7-0 환경 점검용 빈 월드(docs/31 31.12).
+  - 바닥 + 해만 있다. 선반·지도는 7-1에서 격자로부터 자동 생성한다.
+  - gazebo_ros_state: /gazebo/get_entity_state 서비스로 로봇의 "정답 위치"(시뮬레이터가 아는 실제 위치)를 준다.
+    odom이 드리프트 없는지 비교하는 기준으로 쓴다.
+  - 물리 설정은 Gazebo 기본값(1 ms 스텝, 실시간 목표 1000 Hz) 그대로 — RTF를 있는 그대로 재기 위해.
+-->
+<sdf version="1.6">
+  <world name="mapf_empty_check">
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so">
+      <ros>
+        <namespace>/gazebo</namespace>
+      </ros>
+      <update_rate>10.0</update_rate>
+    </plugin>
+  </world>
+</sdf>

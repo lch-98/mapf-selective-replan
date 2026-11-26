@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mapf_gazebo</name>
+  <version>0.1.0</version>
+  <description>MAPF 선택적 재계획의 Gazebo 3D 실험: TurtleBot3 다중 로봇 launch, 월드, 시나리오·점검 스크립트 (docs/31)</description>
+  <maintainer email="noreply@example.com">lch-98</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>gazebo_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>rosgraph_msgs</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>turtlebot3_gazebo</exec_depend>
+  <exec_depend>turtlebot3_description</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

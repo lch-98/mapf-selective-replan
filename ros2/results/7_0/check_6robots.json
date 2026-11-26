@@ -1,0 +1,140 @@
+{
+  "num_robots": 6,
+  "A_topics": {
+    "ok": true,
+    "missing": [],
+    "unnamespaced": []
+  },
+  "B_tf": {
+    "ok": true,
+    "lacking": [],
+    "bad_names": [],
+    "frames": [
+      "robot_1/base_footprint",
+      "robot_1/base_link",
+      "robot_1/base_scan",
+      "robot_1/caster_back_link",
+      "robot_1/imu_link",
+      "robot_1/odom",
+      "robot_1/wheel_left_link",
+      "robot_1/wheel_right_link",
+      "robot_2/base_footprint",
+      "robot_2/base_link",
+      "robot_2/base_scan",
+      "robot_2/caster_back_link",
+      "robot_2/imu_link",
+      "robot_2/odom",
+      "robot_2/wheel_left_link",
+      "robot_2/wheel_right_link",
+      "robot_3/base_footprint",
+      "robot_3/base_link",
+      "robot_3/base_scan",
+      "robot_3/caster_back_link",
+      "robot_3/imu_link",
+      "robot_3/odom",
+      "robot_3/wheel_left_link",
+      "robot_3/wheel_right_link",
+      "robot_4/base_footprint",
+      "robot_4/base_link",
+      "robot_4/base_scan",
+      "robot_4/caster_back_link",
+      "robot_4/imu_link",
+      "robot_4/odom",
+      "robot_4/wheel_left_link",
+      "robot_4/wheel_right_link",
+      "robot_5/base_footprint",
+      "robot_5/base_link",
+      "robot_5/base_scan",
+      "robot_5/caster_back_link",
+      "robot_5/imu_link",
+      "robot_5/odom",
+      "robot_5/wheel_left_link",
+      "robot_5/wheel_right_link",
+      "robot_6/base_footprint",
+      "robot_6/base_link",
+      "robot_6/base_scan",
+      "robot_6/caster_back_link",
+      "robot_6/imu_link",
+      "robot_6/odom",
+      "robot_6/wheel_left_link",
+      "robot_6/wheel_right_link"
+    ]
+  },
+  "C_separate": {
+    "ok": true,
+    "robot1_cmd": {
+      "1": [
+        0.4487951212231308,
+        0.0001951800135223618
+      ],
+      "2": [
+        1.111453563796145e-06,
+        5.094380780518351e-05
+      ],
+      "3": [
+        2.162366324503312e-06,
+        4.390719689092643e-05
+      ],
+      "4": [
+        4.515114534735286e-06,
+        6.153547526173047e-05
+      ],
+      "5": [
+        1.2939167867084223e-06,
+        5.989187082345574e-05
+      ],
+      "6": [
+        2.8800438106614635e-06,
+        5.3303371940082785e-05
+      ]
+    },
+    "robot2_cmd": {
+      "1": [
+        1.5292833243337072e-05,
+        0.0005070242383917917
+      ],
+      "2": [
+        0.0024916974049014984,
+        91.82167755314492
+      ],
+      "3": [
+        6.826563874774002e-07,
+        2.4491364339085797e-05
+      ],
+      "4": [
+        4.950623511538931e-07,
+        2.2727620292661214e-05
+      ],
+      "5": [
+        5.893912718060803e-07,
+        1.947831290934772e-05
+      ],
+      "6": [
+        7.641624919938396e-07,
+        2.4300940348180858e-05
+      ]
+    }
+  },
+  "D_odom": {
+    "ok": true,
+    "pos_err_m": 1.5479126086293122e-07,
+    "yaw_err_deg": 0.0004174705013827371,
+    "approx_travel_m": 2.4,
+    "odom_start": [
+      0.44886841827406365,
+      -1.2325487157599686e-05,
+      8.092564695723031e-06
+    ],
+    "gt_start": [
+      0.4488683065093986,
+      -1.2326178002882284e-05,
+      8.104915513909462e-06
+    ],
+    "odom_vs_world_origin_gap_m": 1.1176680020148195e-07
+  },
+  "E_rtf": {
+    "idle": 0.9923726415928692,
+    "all_rotating": 0.992490030632553
+  },
+  "all_ok": true
+}
