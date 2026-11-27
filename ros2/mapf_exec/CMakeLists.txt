@@ -11,7 +11,7 @@ add_compile_options(-Wall -Wextra)
 
 find_package(ament_cmake REQUIRED)
 
-add_library(mapf_exec src/geometry.cpp src/plan_check.cpp src/follower_control.cpp)
+add_library(mapf_exec src/geometry.cpp src/plan_check.cpp src/follower_control.cpp src/adg.cpp)
 target_include_directories(mapf_exec PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -27,8 +27,11 @@ ament_export_targets(export_mapf_exec HAS_LIBRARY_TARGET)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_mapf_exec test/test_geometry.cpp test/test_plan_check.cpp test/test_follower_control.cpp)
+  ament_add_gtest(test_mapf_exec test/test_geometry.cpp test/test_plan_check.cpp test/test_follower_control.cpp test/test_adg.cpp)
   target_link_libraries(test_mapf_exec mapf_exec)
+  ament_add_gtest(test_analyze_run test/test_analyze_run.cpp)
+  target_compile_definitions(test_analyze_run PRIVATE ANALYZE_RUN_PATH="$<TARGET_FILE:analyze_run>")
+  add_dependencies(test_analyze_run analyze_run)
 endif()
 
 ament_package()

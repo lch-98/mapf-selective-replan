@@ -4,14 +4,14 @@
  "max_angular": 0.8,
  "actions_done": 30,
  "actions_total": 30,
- "max_arrive_err_m": 0.004379387524982667,
- "mean_arrive_err_m": 0.003296897096195461,
- "sim_seconds": 170.272,
+ "max_arrive_err_m": 0.005217836139428792,
+ "mean_arrive_err_m": 0.004589439539860364,
+ "sim_seconds": 169.184,
  "analysis": {
-  "samples": 5009,
+  "samples": 4977,
   "escape_samples": 0,
   "max_escape_m": 0.0,
-  "max_cross_m": 0.0048,
+  "max_cross_m": 0.0059,
   "max_overshoot_m": 0.0,
   "shelf_or_wall_overlap_samples": 0
  },
@@ -28,7 +28,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003084406294430672
+   "arrive_err_m": 0.004631066428801345
   },
   {
    "seq": 1,
@@ -42,7 +42,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003008057750846041
+   "arrive_err_m": 0.004897625149755532
   },
   {
    "seq": 2,
@@ -56,7 +56,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0029848933176263455
+   "arrive_err_m": 0.004369362096779538
   },
   {
    "seq": 3,
@@ -70,7 +70,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003093260720336955
+   "arrive_err_m": 0.004835893486678123
   },
   {
    "seq": 4,
@@ -84,7 +84,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003100831032525445
+   "arrive_err_m": 0.004342267599886463
   },
   {
    "seq": 5,
@@ -98,7 +98,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0036146624170209376
+   "arrive_err_m": 0.004373905191986401
   },
   {
    "seq": 6,
@@ -112,7 +112,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003423709770243328
+   "arrive_err_m": 0.0050044465458237465
   },
   {
    "seq": 7,
@@ -126,7 +126,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0032364807357669477
+   "arrive_err_m": 0.004298643731767129
   },
   {
    "seq": 8,
@@ -140,7 +140,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003057733214448664
+   "arrive_err_m": 0.004817376678937544
   },
   {
    "seq": 9,
@@ -154,7 +154,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003310471339650219
+   "arrive_err_m": 0.005217836139428792
   },
   {
    "seq": 10,
@@ -168,7 +168,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003165519309168562
+   "arrive_err_m": 0.004310407955410431
   },
   {
    "seq": 11,
@@ -182,7 +182,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003028076466804725
+   "arrive_err_m": 0.004814188044130375
   },
   {
    "seq": 12,
@@ -196,7 +196,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0029888919915544627
+   "arrive_err_m": 0.004299123401496433
   },
   {
    "seq": 13,
@@ -224,7 +224,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.004114486283387714
+   "arrive_err_m": 0.0049854442406791
   },
   {
    "seq": 15,
@@ -238,7 +238,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0033687844326947187
+   "arrive_err_m": 0.004278455336452359
   },
   {
    "seq": 16,
@@ -252,7 +252,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0030904789306987913
+   "arrive_err_m": 0.004806008096882129
   },
   {
    "seq": 17,
@@ -266,7 +266,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0031215160558370455
+   "arrive_err_m": 0.0042975649449346325
   },
   {
    "seq": 18,
@@ -280,7 +280,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0034543355516759955
+   "arrive_err_m": 0.005109379334530432
   },
   {
    "seq": 19,
@@ -294,7 +294,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0032928915764926727
+   "arrive_err_m": 0.004906119295335424
   },
   {
    "seq": 20,
@@ -308,7 +308,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003095132675168563
+   "arrive_err_m": 0.004302249129757184
   },
   {
    "seq": 21,
@@ -322,7 +322,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003035611815229779
+   "arrive_err_m": 0.004612972191355938
   },
   {
    "seq": 22,
@@ -336,7 +336,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0036336261446261535
+   "arrive_err_m": 0.0046094824045607875
   },
   {
    "seq": 23,
@@ -350,7 +350,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.004379387524982667
+   "arrive_err_m": 0.004167891698247007
   },
   {
    "seq": 24,
@@ -364,7 +364,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003386793896265116
+   "arrive_err_m": 0.004784465752918762
   },
   {
    "seq": 25,
@@ -378,7 +378,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.003128411464474795
+   "arrive_err_m": 0.0042926907976323075
   },
   {
    "seq": 26,
@@ -392,7 +392,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0036301344865880283
+   "arrive_err_m": 0.0043925133792442235
   },
   {
    "seq": 27,
@@ -406,7 +406,7 @@
    ],
    "kind": "MOVE",
    "state": "DONE",
-   "arrive_err_m": 0.0031876363987320953
+   "arrive_err_m": 0.004157488522817683
   },
   {
    "seq": 28,

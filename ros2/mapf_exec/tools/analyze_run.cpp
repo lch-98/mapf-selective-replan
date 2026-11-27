@@ -136,6 +136,11 @@ int main(int argc, char** argv) {
             flush_pairs();
             cur_t = r.t;
         }
+        // 같은 시각에 같은 로봇이 또 나오면 건너뜀(기록하는 쪽 타이머가 같은 시뮬레이터 시각에 두 번 돌 수 있음, 31.22).
+        // 안 그러면 로봇이 자기 자신과 "겹친" 것으로 세어진다.
+        bool dup = false;
+        for (const auto& o : same_t) dup = dup || o.robot == r.robot;
+        if (dup) continue;
         same_t.push_back(r);
 
         auto& st = robots[r.robot];

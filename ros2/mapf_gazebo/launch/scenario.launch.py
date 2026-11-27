@@ -32,10 +32,15 @@ def _setup(context):
     with open(world_path, 'w') as f:
         f.write(world_xml(sc, flip_y=flip))
 
+    # Gazebo가 /clock을 내보내는 빈도(기본 10 Hz). 낮으면 20 Hz 제어·기록 타이머가 같은 시뮬레이터 시각에 두 번씩 돈다(31.22).
+    params_path = os.path.join(os.path.dirname(world_path), 'gazebo_params.yaml')
+    with open(params_path, 'w') as f:
+        f.write(f"gazebo:\n  ros__parameters:\n    publish_rate: {float(LaunchConfiguration('clock_hz').perform(context))}\n")
+
     gazebo_ros = get_package_share_directory('gazebo_ros')
     actions = [IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(gazebo_ros, 'launch', 'gzserver.launch.py')),
-        launch_arguments={'world': world_path}.items())]
+        launch_arguments={'world': world_path, 'params_file': params_path}.items())]
     if LaunchConfiguration('gui').perform(context).lower() == 'true':
         actions.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(gazebo_ros, 'launch', 'gzclient.launch.py'))))
@@ -52,7 +57,8 @@ def _setup(context):
         for r in sc['robots']:
             actions.append(Node(package='mapf_ros', executable='cell_follower', namespace=r['name'], output='log',
                                 parameters=[{'use_sim_time': True, 'max_linear': float(r['max_linear']),
-                                             'max_angular': float(r['max_angular'])}]))
+                                             'max_angular': float(r['max_angular']),
+                                             'estop_distance': float(LaunchConfiguration('estop_distance').perform(context))}]))
     return actions
 
 
@@ -62,6 +68,8 @@ def generate_launch_description():
         DeclareLaunchArgument('gui', default_value='false'),
         DeclareLaunchArgument('spawn_delay', default_value='0.5'),
         DeclareLaunchArgument('followers', default_value='true', description='로봇마다 cell_follower 노드(7-2)'),
+        DeclareLaunchArgument('clock_hz', default_value='100.0', description='Gazebo /clock 빈도(Hz)'),
+        DeclareLaunchArgument('estop_distance', default_value='0.25', description='비상 정지 거리(m). 0이면 끔 — 변이 검사용, 실험에 쓰지 말 것'),
         DeclareLaunchArgument('debug_no_flip', default_value='false', description='변이 검사용(틀린 월드). 실험에 쓰지 말 것'),
         OpaqueFunction(function=_setup),
     ])

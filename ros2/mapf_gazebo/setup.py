@@ -23,6 +23,7 @@ setup(
             'check_7_1 = mapf_gazebo.check_7_1:main',
             'run_7_2 = mapf_gazebo.run_7_2:main',
             'plot_run = mapf_gazebo.plot_run:main',
+            'run_7_3 = mapf_gazebo.run_7_3:main',
             'make_scenario = mapf_gazebo.make_scenario:main',
             'grid_to_world = mapf_gazebo.grid_to_world:main',
             'draw_scenario = mapf_gazebo.draw_scenario:main',

@@ -14,7 +14,7 @@ source install/setup.bash
 | `mapf_gazebo` | TurtleBot3 N대 launch, 시나리오 JSON → 월드, 점검·시나리오 스크립트 | 7-0, 7-1 |
 | `mapf_exec` | ROS 모르는 C++: 칸↔미터, 계획 검사, 몸 검사, 돌고-가기 계산, 기록 분석기 `analyze_run` (이후 ADG·번호 다시 붙이기) | 7-2 |
 | `mapf_ros_msgs` | `ActionCommand`, `ActionStatus` | 7-2 |
-| `mapf_ros` | `cell_follower`(돌고-가기 노드), 이후 `mapf_executive` | 7-2 |
+| `mapf_ros` | `cell_follower`(돌고-가기 노드), `mapf_executive`(저장된 계획 → 계획 검사 → ADG 실행·기록) | 7-2, 7-3 |
 
 ## 7-0 환경 점검
 
@@ -57,3 +57,16 @@ ros2 run mapf_gazebo plot_run --scenario follow_corridor10_slow --log my_run/run
 ./build/mapf_exec/test_mapf_exec
 ```
 결과: `results/7_2/`, 해석: docs/31 31.21.
+
+## 7-3 여러 대 ADG 실행
+
+```
+# 터미널 1: 6대 시나리오 (cell_follower 같이 뜸, Gazebo 시계 100 Hz)
+ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1 gui:=true
+# 터미널 2: 저장된 처음 계획을 ADG로 실행 → 기록 분석 (약 1분)
+ros2 run mapf_gazebo run_7_3 --scenario corridor10_r6_s1 --out-dir my73
+ros2 run mapf_gazebo plot_run --scenario corridor10_r6_s1 --log my73/run.csv --out my73/track.png
+# 변이 검사(부딪혀야 정상): 터미널 1을 estop_distance:=0.0 으로 다시 띄우고
+ros2 run mapf_gazebo run_7_3 --scenario corridor10_r6_s1 --out-dir my73_mut --drop-cross-edges
+```
+한 번 실행하면 로봇이 목적지에 가 있으므로, 다시 돌리려면 터미널 1을 껐다 켠다. 결과: `results/7_3/`, 해석: docs/31 31.22.

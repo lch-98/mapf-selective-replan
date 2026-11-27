@@ -13,6 +13,8 @@
   <depend>sensor_msgs</depend>
   <depend>mapf_ros_msgs</depend>
   <depend>mapf_exec</depend>
+  <depend>gazebo_msgs</depend>
+  <depend>nlohmann-json-dev</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

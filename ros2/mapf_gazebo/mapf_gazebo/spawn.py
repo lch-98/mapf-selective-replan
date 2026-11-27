@@ -36,6 +36,15 @@ def robot_actions(robots, spawn_delay=0.5):
             tag.text = f'{ns}/base_footprint'
         for tag in tree.getroot().iter('frame_name'):
             tag.text = f'{ns}/base_scan'
+        # 접촉 센서(7-3, 31.11 "접촉"): 몸 상자(base_collision)가 무언가에 닿으면 /robot_i/bumper_states로 알림.
+        # 몸 상자 바닥은 바닥에서 1 cm 떠 있어서 바닥과는 안 닿는다 → 다른 로봇·선반·벽과 닿을 때만 나옴.
+        for link in tree.getroot().iter('link'):
+            if link.get('name') == 'base_link':
+                link.append(ET.fromstring(
+                    '<sensor name="body_contact" type="contact"><always_on>true</always_on><update_rate>20</update_rate>'
+                    '<contact><collision>base_collision</collision></contact>'
+                    '<plugin name="body_bumper" filename="libgazebo_ros_bumper.so"><frame_name>world</frame_name></plugin>'
+                    '</sensor>'))
         sdf_path = os.path.join(out_dir, f'{ns}.sdf')
         # encoding 선언이 있으면 spawn_entity.py(lxml)가 "Unicode strings with encoding declaration" 오류로 못 읽는다.
         with open(sdf_path, 'w') as f:

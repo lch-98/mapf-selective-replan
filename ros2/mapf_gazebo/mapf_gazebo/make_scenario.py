@@ -61,7 +61,7 @@ def make(kind, size, n, seed, service=(0, 0), v_range=(0.12, 0.22), w_range=(0.8
         })
     return {
         'format': FORMAT,
-        'name': f'{kind}{size}_r{n}_s{seed}',
+        'name': f'{kind}{size}_r{n}_s{seed}' + (f'_sv{service[0]}-{service[1]}' if service[1] > 0 else ''),
         'map_kind': kind,
         'cell_size': CELL_SIZE,
         'dt_nom_s': dt_nom,
