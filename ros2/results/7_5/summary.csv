@@ -1,0 +1,14 @@
+group,scenario,method,ok,done,abort,makespan_s,sum_finish_s,replans,phantoms,phantom_cands,changed,compute_ms,tier,new_plan_steps,detect_s,confirm_s,replan_s,stop_wait_s,hold_s,stop_s,yield_s,min_gap_cm,contacts,estops,escape,overlap,passed,cancels,t_wait,d_detect,detection
+noobs,corridor10_r6_s1,ours,True,True,,38.5,119.7,0,0,0,0,,,,,,,,0.0,0.0,7.6,24.2,0,0,0,0,21/33,0,3.0,2.0,lidar
+noobs,corridor10_r6_s1_sv1-3,ours,True,True,,49.9,178.0,0,0,0,0,,,,,,,,0.0,0.0,7.6,24.2,0,0,0,0,21/33,0,3.0,2.0,lidar
+noobs,open10_r6_s1,ours,True,True,,43.3,137.4,0,0,0,0,,,,,,,,0.0,0.0,6.2,35.0,0,0,0,0,22/36,0,3.0,2.0,lidar
+ob1,corridor10_r6_s1_ob1,full,True,True,,72.4,246.3,1,0,0,3,0.63,,15,2.2,5.3,8.8,3.5,0.0,5.8,51.9,31.1,0,0,0,0,29/49,0,3.0,2.0,lidar
+ob1,corridor10_r6_s1_ob1,ours,True,True,,119.0,257.7,1,0,0,1,0.52,0,20,2.1,6.2,8.8,2.7,0.0,5.9,52.2,24.1,0,0,0,0,27/49,0,3.0,2.0,lidar
+ob1,corridor10_r6_s1_sv1-3_ob1,full,True,True,,84.9,292.5,1,0,0,3,0.35,,18,2.2,5.2,8.8,3.6,0.0,7.5,40.0,31.3,0,0,0,0,29/49,0,3.0,2.0,lidar
+ob1,corridor10_r6_s1_sv1-3_ob1,ours,True,True,,131.6,318.1,1,0,0,1,0.26,0,23,2.2,5.3,8.8,3.5,0.0,7.5,52.6,24.1,0,0,0,0,27/49,0,3.0,2.0,lidar
+ob1,open10_r6_s1_ob1,full,True,True,,47.9,163.0,1,0,0,1,0.46,,11,2.0,5.1,10.4,5.3,0.0,18.8,6.0,35.2,0,0,0,0,19/36,2,3.0,2.0,lidar
+ob1,open10_r6_s1_ob1,ours,True,True,,47.9,162.8,1,0,0,1,0.16,0,11,2.2,5.2,10.4,5.2,0.0,18.8,6.0,35.0,0,0,0,0,19/36,2,3.0,2.0,lidar
+hold,corridor10_r6_s1_hold,full,False,False,재계획 실패(full),7.0,11.0,0,0,0,0,0.12,,,4.8,14.9,18.6,3.8,4.6,7.4,0.0,53.1,0,0,0,0,12/21,2,10.0,1.0,lidar
+hold,corridor10_r6_s1_hold,ours,True,True,,92.3,295.9,1,0,0,4,0.69,1,16,4.8,14.8,18.6,3.8,4.6,7.4,49.8,24.0,0,0,0,0,30/57,2,10.0,1.0,lidar
+hold,open10_r6_s1_hold,full,True,True,,43.2,183.6,1,0,0,2,0.4,,7,5.0,15.1,19.1,4.0,5.2,4.8,22.8,24.2,0,0,0,0,20/38,1,10.0,1.0,lidar
+hold,open10_r6_s1_hold,ours,True,True,,43.2,161.7,1,0,0,1,0.22,0,7,5.0,15.1,19.1,4.1,5.2,4.7,6.2,30.3,0,0,0,0,21/38,1,10.0,1.0,lidar

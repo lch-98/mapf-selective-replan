@@ -1,0 +1,229 @@
+{
+ "scenario": "open10_r6_s1_ob1",
+ "method": "full",
+ "drop_cross_edges": false,
+ "checks": {
+  "모든 동작 완료": true,
+  "계획 검사 (가) 통과": true,
+  "몸 겹침 0 (기록)": true,
+  "접촉 0 (Gazebo 센서)": true,
+  "칸 이탈 0": true,
+  "선반/벽 겹침 0": true,
+  "비상 정지 0": true,
+  "칸 사용 순서 = 계획": true,
+  "늦은 취소 0": true,
+  "오탐 확정 0 (LiDAR)": true,
+  "재계획 성공 + 새 계획 검사 통과": true
+ },
+ "obstacles": [
+  {
+   "bins_seen": 16,
+   "bins_total": 16,
+   "cell": [
+    4,
+    0
+   ],
+   "changed_robots": [
+    "robot_2"
+   ],
+   "compute_ms": 0.460065,
+   "confirm_s": 5.1,
+   "detect_s": 2.0429999999999993,
+   "detected_by": "robot_1",
+   "detection": "lidar",
+   "drops": 0,
+   "first_detect_s": 2.0429999999999993,
+   "method": "full",
+   "new_plan_steps": 11,
+   "phantom": false,
+   "plan_check_violations": 0,
+   "replan_s": 10.45,
+   "sim_detect_s": 2.0,
+   "sim_detected_by": "robot_1",
+   "spawn_s": 2.0,
+   "success": true
+  }
+ ],
+ "state_time_s": {
+  "robot_1": {
+   "DONE": 21.450000000000003,
+   "MOVE": 23.0,
+   "STOP": 3.4000000000000004
+  },
+  "robot_2": {
+   "DONE": 23.4,
+   "MOVE": 20.450000000000003,
+   "STOP": 4.0
+  },
+  "robot_3": {
+   "DONE": 0.04999999999999716,
+   "MOVE": 44.7,
+   "STOP": 3.1000000000000014
+  },
+  "robot_4": {
+   "DONE": 27.450000000000003,
+   "MOVE": 10.2,
+   "STOP": 4.200000000000001,
+   "YIELD": 5.999999999999998
+  },
+  "robot_5": {
+   "DONE": 37.45,
+   "MOVE": 10.4
+  },
+  "robot_6": {
+   "DONE": 14.649999999999999,
+   "MOVE": 29.150000000000002,
+   "STOP": 4.050000000000001
+  }
+ },
+ "all_ok": true,
+ "body_overlap_samples": 0,
+ "min_body_gap_m": 0.3519,
+ "escape_samples": 0,
+ "shelf_overlap_samples": 0,
+ "analysis": {
+  "robots": {
+   "robot_1": {
+    "samples": 958,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.003,
+    "max_overshoot_m": 0.0053,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_2": {
+    "samples": 958,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0053,
+    "max_overshoot_m": 0.0109,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_3": {
+    "samples": 958,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0034,
+    "max_overshoot_m": 0.0111,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_4": {
+    "samples": 958,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0,
+    "max_overshoot_m": 0.0013,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_5": {
+    "samples": 958,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0044,
+    "max_overshoot_m": 0.0,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_6": {
+    "samples": 958,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.008,
+    "max_overshoot_m": 0.0074,
+    "shelf_or_wall_overlap_samples": 0
+   }
+  },
+  "pairs": {
+   "robot_1|robot_2": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 0.8707
+   },
+   "robot_1|robot_3": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 0.9222
+   },
+   "robot_1|robot_4": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.362
+   },
+   "robot_1|robot_5": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.1888
+   },
+   "robot_1|robot_6": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 0.8186
+   },
+   "robot_2|robot_3": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.9078
+   },
+   "robot_2|robot_4": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.8616
+   },
+   "robot_2|robot_5": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.8889
+   },
+   "robot_2|robot_6": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.5483
+   },
+   "robot_3|robot_4": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.8138
+   },
+   "robot_3|robot_5": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 2.6046
+   },
+   "robot_3|robot_6": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 0.3573
+   },
+   "robot_4|robot_5": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.8681
+   },
+   "robot_4|robot_6": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 0.3519
+   },
+   "robot_5|robot_6": {
+    "checked": 958,
+    "overlap_samples": 0,
+    "min_distance_m": 1.3706
+   }
+  }
+ },
+ "makespan_s": 47.85,
+ "plan_makespan_steps": 13,
+ "cross_edges": 1,
+ "actions": 36,
+ "pass_through": true,
+ "moves": 36,
+ "passed_moves": 19,
+ "cancels": 2,
+ "sum_finish_s": 162.95000000000002,
+ "detection": "lidar",
+ "phantoms_confirmed": 0,
+ "held_cell_hits": 0,
+ "phantom_detections": 0,
+ "late_scans": 0,
+ "t_wait": 3.0,
+ "d_detect": 2.0
+}

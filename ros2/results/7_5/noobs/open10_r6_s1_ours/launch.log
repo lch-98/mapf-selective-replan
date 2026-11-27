@@ -1,0 +1,266 @@
+[INFO] [launch]: All log files can be found below /home/lee/.ros/log/2026-11-27-14-27-46-715683-lee-ThinkPad-E15-Gen-3-184321
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [gzserver-1]: process started with pid [184325]
+[INFO] [cell_follower-2]: process started with pid [184327]
+[INFO] [cell_follower-3]: process started with pid [184329]
+[INFO] [cell_follower-4]: process started with pid [184331]
+[INFO] [cell_follower-5]: process started with pid [184333]
+[INFO] [cell_follower-6]: process started with pid [184335]
+[INFO] [cell_follower-7]: process started with pid [184337]
+[INFO] [static_transform_publisher-8]: process started with pid [184339]
+[INFO] [static_transform_publisher-9]: process started with pid [184341]
+[INFO] [static_transform_publisher-10]: process started with pid [184343]
+[INFO] [static_transform_publisher-11]: process started with pid [184345]
+[INFO] [static_transform_publisher-12]: process started with pid [184376]
+[INFO] [static_transform_publisher-13]: process started with pid [184414]
+[INFO] [robot_state_publisher-14]: process started with pid [184470]
+[INFO] [spawn_entity.py-15]: process started with pid [184472]
+[cell_follower-2] [INFO] [1795757267.168427394] [robot_1.cell_follower]: 최고 선속도 0.18 m/s, 최고 각속도 1.38 rad/s
+[cell_follower-3] [INFO] [1795757267.169827928] [robot_2.cell_follower]: 최고 선속도 0.21 m/s, 최고 각속도 1.39 rad/s
+[cell_follower-4] [INFO] [1795757267.178791085] [robot_3.cell_follower]: 최고 선속도 0.17 m/s, 최고 각속도 0.92 rad/s
+[cell_follower-5] [INFO] [1795757267.182221107] [robot_4.cell_follower]: 최고 선속도 0.22 m/s, 최고 각속도 1.17 rad/s
+[cell_follower-6] [INFO] [1795757267.174690603] [robot_5.cell_follower]: 최고 선속도 0.18 m/s, 최고 각속도 1.28 rad/s
+[cell_follower-7] [INFO] [1795757267.176958729] [robot_6.cell_follower]: 최고 선속도 0.21 m/s, 최고 각속도 1.09 rad/s
+[static_transform_publisher-8] [INFO] [1795757267.178520527] [world_to_robot_1_odom]: Spinning until stopped - publishing transform
+[static_transform_publisher-8] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-8] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-8] from 'world' to 'robot_1/odom'
+[static_transform_publisher-9] [INFO] [1795757267.188201885] [world_to_robot_2_odom]: Spinning until stopped - publishing transform
+[static_transform_publisher-9] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-9] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-9] from 'world' to 'robot_2/odom'
+[static_transform_publisher-10] [INFO] [1795757267.188461123] [world_to_robot_3_odom]: Spinning until stopped - publishing transform
+[static_transform_publisher-10] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-10] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-10] from 'world' to 'robot_3/odom'
+[static_transform_publisher-11] [INFO] [1795757267.188359291] [world_to_robot_4_odom]: Spinning until stopped - publishing transform
+[static_transform_publisher-11] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-11] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-11] from 'world' to 'robot_4/odom'
+[static_transform_publisher-13] [INFO] [1795757267.190263663] [world_to_robot_6_odom]: Spinning until stopped - publishing transform
+[static_transform_publisher-13] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-13] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-13] from 'world' to 'robot_6/odom'
+[static_transform_publisher-12] [INFO] [1795757267.201133116] [world_to_robot_5_odom]: Spinning until stopped - publishing transform
+[static_transform_publisher-12] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-12] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-12] from 'world' to 'robot_5/odom'
+[robot_state_publisher-14] [INFO] [1795757267.251244005] [robot_1.robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-14] [INFO] [1795757267.251369471] [robot_1.robot_state_publisher]: got segment base_link
+[robot_state_publisher-14] [INFO] [1795757267.251379700] [robot_1.robot_state_publisher]: got segment base_scan
+[robot_state_publisher-14] [INFO] [1795757267.251386412] [robot_1.robot_state_publisher]: got segment caster_back_link
+[robot_state_publisher-14] [INFO] [1795757267.251393035] [robot_1.robot_state_publisher]: got segment imu_link
+[robot_state_publisher-14] [INFO] [1795757267.251399838] [robot_1.robot_state_publisher]: got segment wheel_left_link
+[robot_state_publisher-14] [INFO] [1795757267.251406410] [robot_1.robot_state_publisher]: got segment wheel_right_link
+[spawn_entity.py-15] [INFO] [1795757267.541209140] [robot_1.spawn_entity]: Spawn Entity started
+[spawn_entity.py-15] [INFO] [1795757267.541554770] [robot_1.spawn_entity]: Loading entity XML from file /tmp/mapf_tb3_mk3xug7m/robot_1.sdf
+[spawn_entity.py-15] [INFO] [1795757267.542218919] [robot_1.spawn_entity]: Waiting for service /spawn_entity, timeout = 30
+[spawn_entity.py-15] [INFO] [1795757267.542513082] [robot_1.spawn_entity]: Waiting for service /spawn_entity
+[INFO] [robot_state_publisher-16]: process started with pid [184520]
+[INFO] [spawn_entity.py-17]: process started with pid [184522]
+[robot_state_publisher-16] [INFO] [1795757267.729830779] [robot_2.robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-16] [INFO] [1795757267.729928833] [robot_2.robot_state_publisher]: got segment base_link
+[robot_state_publisher-16] [INFO] [1795757267.729938642] [robot_2.robot_state_publisher]: got segment base_scan
+[robot_state_publisher-16] [INFO] [1795757267.729945825] [robot_2.robot_state_publisher]: got segment caster_back_link
+[robot_state_publisher-16] [INFO] [1795757267.729953109] [robot_2.robot_state_publisher]: got segment imu_link
+[robot_state_publisher-16] [INFO] [1795757267.729959932] [robot_2.robot_state_publisher]: got segment wheel_left_link
+[robot_state_publisher-16] [INFO] [1795757267.729966784] [robot_2.robot_state_publisher]: got segment wheel_right_link
+[spawn_entity.py-17] [INFO] [1795757267.990613318] [robot_2.spawn_entity]: Spawn Entity started
+[spawn_entity.py-17] [INFO] [1795757267.990967444] [robot_2.spawn_entity]: Loading entity XML from file /tmp/mapf_tb3_mk3xug7m/robot_2.sdf
+[spawn_entity.py-17] [INFO] [1795757267.991626122] [robot_2.spawn_entity]: Waiting for service /spawn_entity, timeout = 30
+[spawn_entity.py-17] [INFO] [1795757267.991941586] [robot_2.spawn_entity]: Waiting for service /spawn_entity
+[spawn_entity.py-15] [INFO] [1795757268.046976766] [robot_1.spawn_entity]: Calling service /spawn_entity
+[gzserver-1] [INFO] [1795757268.049929068] [gazebo.gazebo_ros_state]: Publishing states of gazebo models at [/gazebo/model_states]
+[gzserver-1] [INFO] [1795757268.050930842] [gazebo.gazebo_ros_state]: Publishing states of gazebo links at [/gazebo/link_states]
+[INFO] [robot_state_publisher-18]: process started with pid [184601]
+[INFO] [spawn_entity.py-19]: process started with pid [184603]
+[robot_state_publisher-18] [INFO] [1795757268.231966964] [robot_3.robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-18] [INFO] [1795757268.232064548] [robot_3.robot_state_publisher]: got segment base_link
+[robot_state_publisher-18] [INFO] [1795757268.232072954] [robot_3.robot_state_publisher]: got segment base_scan
+[robot_state_publisher-18] [INFO] [1795757268.232078614] [robot_3.robot_state_publisher]: got segment caster_back_link
+[robot_state_publisher-18] [INFO] [1795757268.232084265] [robot_3.robot_state_publisher]: got segment imu_link
+[robot_state_publisher-18] [INFO] [1795757268.232089535] [robot_3.robot_state_publisher]: got segment wheel_left_link
+[robot_state_publisher-18] [INFO] [1795757268.232095005] [robot_3.robot_state_publisher]: got segment wheel_right_link
+[spawn_entity.py-17] [INFO] [1795757268.245859674] [robot_2.spawn_entity]: Calling service /spawn_entity
+[gzserver-1] [INFO] [1795757268.296276788] [robot_1.body_bumper]: Publishing contact states to [/robot_1/bumper_states]
+[gzserver-1] [INFO] [1795757268.309227836] [robot_1.turtlebot3_imu]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[spawn_entity.py-15] [INFO] [1795757268.402963323] [robot_1.spawn_entity]: Spawn status: SpawnEntity: Successfully spawned entity [robot_1]
+[gzserver-1] [INFO] [1795757268.521203870] [robot_1.turtlebot3_diff_drive]: Wheel pair 1 separation set to [0.160000m]
+[gzserver-1] [INFO] [1795757268.521274663] [robot_1.turtlebot3_diff_drive]: Wheel pair 1 diameter set to [0.066000m]
+[gzserver-1] [INFO] [1795757268.522459481] [robot_1.turtlebot3_diff_drive]: Subscribed to [/robot_1/cmd_vel]
+[gzserver-1] [INFO] [1795757268.524613282] [robot_1.turtlebot3_diff_drive]: Advertise odometry on [/robot_1/odom]
+[gzserver-1] [INFO] [1795757268.527293453] [robot_1.turtlebot3_diff_drive]: Publishing odom transforms between [robot_1/odom] and [robot_1/base_footprint]
+[gzserver-1] [INFO] [1795757268.538985383] [robot_1.turtlebot3_joint_state]: Going to publish joint [wheel_left_joint]
+[gzserver-1] [INFO] [1795757268.539034415] [robot_1.turtlebot3_joint_state]: Going to publish joint [wheel_right_joint]
+[spawn_entity.py-19] [INFO] [1795757268.545758602] [robot_3.spawn_entity]: Spawn Entity started
+[spawn_entity.py-19] [INFO] [1795757268.546136964] [robot_3.spawn_entity]: Loading entity XML from file /tmp/mapf_tb3_mk3xug7m/robot_3.sdf
+[spawn_entity.py-19] [INFO] [1795757268.546957697] [robot_3.spawn_entity]: Waiting for service /spawn_entity, timeout = 30
+[spawn_entity.py-19] [INFO] [1795757268.547279563] [robot_3.spawn_entity]: Waiting for service /spawn_entity
+[spawn_entity.py-19] [INFO] [1795757268.551171453] [robot_3.spawn_entity]: Calling service /spawn_entity
+[INFO] [spawn_entity.py-15]: process has finished cleanly [pid 184472]
+[INFO] [robot_state_publisher-20]: process started with pid [184629]
+[INFO] [spawn_entity.py-21]: process started with pid [184631]
+[robot_state_publisher-20] [INFO] [1795757268.718987290] [robot_4.robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-20] [INFO] [1795757268.719084142] [robot_4.robot_state_publisher]: got segment base_link
+[robot_state_publisher-20] [INFO] [1795757268.719094872] [robot_4.robot_state_publisher]: got segment base_scan
+[robot_state_publisher-20] [INFO] [1795757268.719102667] [robot_4.robot_state_publisher]: got segment caster_back_link
+[robot_state_publisher-20] [INFO] [1795757268.719110582] [robot_4.robot_state_publisher]: got segment imu_link
+[robot_state_publisher-20] [INFO] [1795757268.719119448] [robot_4.robot_state_publisher]: got segment wheel_left_link
+[robot_state_publisher-20] [INFO] [1795757268.719127704] [robot_4.robot_state_publisher]: got segment wheel_right_link
+[gzserver-1] [INFO] [1795757268.815802289] [robot_2.body_bumper]: Publishing contact states to [/robot_2/bumper_states]
+[gzserver-1] [INFO] [1795757268.824247783] [robot_2.turtlebot3_imu]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[spawn_entity.py-17] [INFO] [1795757268.919710970] [robot_2.spawn_entity]: Spawn status: SpawnEntity: Successfully spawned entity [robot_2]
+[spawn_entity.py-21] [INFO] [1795757269.020115300] [robot_4.spawn_entity]: Spawn Entity started
+[spawn_entity.py-21] [INFO] [1795757269.020560798] [robot_4.spawn_entity]: Loading entity XML from file /tmp/mapf_tb3_mk3xug7m/robot_4.sdf
+[spawn_entity.py-21] [INFO] [1795757269.021684601] [robot_4.spawn_entity]: Waiting for service /spawn_entity, timeout = 30
+[spawn_entity.py-21] [INFO] [1795757269.022199039] [robot_4.spawn_entity]: Waiting for service /spawn_entity
+[gzserver-1] [INFO] [1795757269.026620685] [robot_2.turtlebot3_diff_drive]: Wheel pair 1 separation set to [0.160000m]
+[gzserver-1] [INFO] [1795757269.026733567] [robot_2.turtlebot3_diff_drive]: Wheel pair 1 diameter set to [0.066000m]
+[gzserver-1] [INFO] [1795757269.027274986] [robot_2.turtlebot3_diff_drive]: Subscribed to [/robot_2/cmd_vel]
+[spawn_entity.py-21] [INFO] [1795757269.027895282] [robot_4.spawn_entity]: Calling service /spawn_entity
+[gzserver-1] [INFO] [1795757269.027934576] [robot_2.turtlebot3_diff_drive]: Advertise odometry on [/robot_2/odom]
+[gzserver-1] [INFO] [1795757269.029684999] [robot_2.turtlebot3_diff_drive]: Publishing odom transforms between [robot_2/odom] and [robot_2/base_footprint]
+[gzserver-1] [INFO] [1795757269.037294721] [robot_2.turtlebot3_joint_state]: Going to publish joint [wheel_left_joint]
+[gzserver-1] [INFO] [1795757269.037369351] [robot_2.turtlebot3_joint_state]: Going to publish joint [wheel_right_joint]
+[INFO] [spawn_entity.py-17]: process has finished cleanly [pid 184522]
+[INFO] [robot_state_publisher-22]: process started with pid [184657]
+[INFO] [spawn_entity.py-23]: process started with pid [184659]
+[robot_state_publisher-22] [INFO] [1795757269.229240932] [robot_5.robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-22] [INFO] [1795757269.229338426] [robot_5.robot_state_publisher]: got segment base_link
+[robot_state_publisher-22] [INFO] [1795757269.229346701] [robot_5.robot_state_publisher]: got segment base_scan
+[robot_state_publisher-22] [INFO] [1795757269.229352382] [robot_5.robot_state_publisher]: got segment caster_back_link
+[robot_state_publisher-22] [INFO] [1795757269.229357932] [robot_5.robot_state_publisher]: got segment imu_link
+[robot_state_publisher-22] [INFO] [1795757269.229363262] [robot_5.robot_state_publisher]: got segment wheel_left_link
+[robot_state_publisher-22] [INFO] [1795757269.229368562] [robot_5.robot_state_publisher]: got segment wheel_right_link
+[gzserver-1] [INFO] [1795757269.324363618] [robot_3.body_bumper]: Publishing contact states to [/robot_3/bumper_states]
+[gzserver-1] [INFO] [1795757269.335962203] [robot_3.turtlebot3_imu]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[spawn_entity.py-19] [INFO] [1795757269.430169558] [robot_3.spawn_entity]: Spawn status: SpawnEntity: Successfully spawned entity [robot_3]
+[gzserver-1] [INFO] [1795757269.537450431] [robot_3.turtlebot3_diff_drive]: Wheel pair 1 separation set to [0.160000m]
+[gzserver-1] [INFO] [1795757269.537568062] [robot_3.turtlebot3_diff_drive]: Wheel pair 1 diameter set to [0.066000m]
+[gzserver-1] [INFO] [1795757269.538160116] [robot_3.turtlebot3_diff_drive]: Subscribed to [/robot_3/cmd_vel]
+[gzserver-1] [INFO] [1795757269.538851486] [robot_3.turtlebot3_diff_drive]: Advertise odometry on [/robot_3/odom]
+[gzserver-1] [INFO] [1795757269.541608872] [robot_3.turtlebot3_diff_drive]: Publishing odom transforms between [robot_3/odom] and [robot_3/base_footprint]
+[spawn_entity.py-23] [INFO] [1795757269.548996106] [robot_5.spawn_entity]: Spawn Entity started
+[spawn_entity.py-23] [INFO] [1795757269.549549697] [robot_5.spawn_entity]: Loading entity XML from file /tmp/mapf_tb3_mk3xug7m/robot_5.sdf
+[gzserver-1] [INFO] [1795757269.549715599] [robot_3.turtlebot3_joint_state]: Going to publish joint [wheel_left_joint]
+[gzserver-1] [INFO] [1795757269.549770222] [robot_3.turtlebot3_joint_state]: Going to publish joint [wheel_right_joint]
+[spawn_entity.py-23] [INFO] [1795757269.550845574] [robot_5.spawn_entity]: Waiting for service /spawn_entity, timeout = 30
+[spawn_entity.py-23] [INFO] [1795757269.551346617] [robot_5.spawn_entity]: Waiting for service /spawn_entity
+[spawn_entity.py-23] [INFO] [1795757269.555612540] [robot_5.spawn_entity]: Calling service /spawn_entity
+[INFO] [spawn_entity.py-19]: process has finished cleanly [pid 184603]
+[INFO] [robot_state_publisher-24]: process started with pid [184685]
+[INFO] [spawn_entity.py-25]: process started with pid [184687]
+[robot_state_publisher-24] [INFO] [1795757269.722502876] [robot_6.robot_state_publisher]: got segment base_footprint
+[robot_state_publisher-24] [INFO] [1795757269.722598606] [robot_6.robot_state_publisher]: got segment base_link
+[robot_state_publisher-24] [INFO] [1795757269.722607403] [robot_6.robot_state_publisher]: got segment base_scan
+[robot_state_publisher-24] [INFO] [1795757269.722613174] [robot_6.robot_state_publisher]: got segment caster_back_link
+[robot_state_publisher-24] [INFO] [1795757269.722618724] [robot_6.robot_state_publisher]: got segment imu_link
+[robot_state_publisher-24] [INFO] [1795757269.722624094] [robot_6.robot_state_publisher]: got segment wheel_left_link
+[robot_state_publisher-24] [INFO] [1795757269.722629444] [robot_6.robot_state_publisher]: got segment wheel_right_link
+[gzserver-1] [INFO] [1795757269.832159308] [robot_4.body_bumper]: Publishing contact states to [/robot_4/bumper_states]
+[gzserver-1] [INFO] [1795757269.843733466] [robot_4.turtlebot3_imu]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[spawn_entity.py-21] [INFO] [1795757269.937758718] [robot_4.spawn_entity]: Spawn status: SpawnEntity: Successfully spawned entity [robot_4]
+[spawn_entity.py-25] [INFO] [1795757270.034069920] [robot_6.spawn_entity]: Spawn Entity started
+[spawn_entity.py-25] [INFO] [1795757270.034423856] [robot_6.spawn_entity]: Loading entity XML from file /tmp/mapf_tb3_mk3xug7m/robot_6.sdf
+[spawn_entity.py-25] [INFO] [1795757270.035144962] [robot_6.spawn_entity]: Waiting for service /spawn_entity, timeout = 30
+[spawn_entity.py-25] [INFO] [1795757270.035461668] [robot_6.spawn_entity]: Waiting for service /spawn_entity
+[spawn_entity.py-25] [INFO] [1795757270.040834453] [robot_6.spawn_entity]: Calling service /spawn_entity
+[gzserver-1] [INFO] [1795757270.044980330] [robot_4.turtlebot3_diff_drive]: Wheel pair 1 separation set to [0.160000m]
+[gzserver-1] [INFO] [1795757270.045058177] [robot_4.turtlebot3_diff_drive]: Wheel pair 1 diameter set to [0.066000m]
+[gzserver-1] [INFO] [1795757270.045612329] [robot_4.turtlebot3_diff_drive]: Subscribed to [/robot_4/cmd_vel]
+[gzserver-1] [INFO] [1795757270.046341711] [robot_4.turtlebot3_diff_drive]: Advertise odometry on [/robot_4/odom]
+[gzserver-1] [INFO] [1795757270.049027903] [robot_4.turtlebot3_diff_drive]: Publishing odom transforms between [robot_4/odom] and [robot_4/base_footprint]
+[gzserver-1] [INFO] [1795757270.057870444] [robot_4.turtlebot3_joint_state]: Going to publish joint [wheel_left_joint]
+[gzserver-1] [INFO] [1795757270.057917963] [robot_4.turtlebot3_joint_state]: Going to publish joint [wheel_right_joint]
+[INFO] [spawn_entity.py-21]: process has finished cleanly [pid 184631]
+[gzserver-1] [INFO] [1795757270.337976015] [robot_5.body_bumper]: Publishing contact states to [/robot_5/bumper_states]
+[gzserver-1] [INFO] [1795757270.349018052] [robot_5.turtlebot3_imu]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[spawn_entity.py-23] [INFO] [1795757270.443492860] [robot_5.spawn_entity]: Spawn status: SpawnEntity: Successfully spawned entity [robot_5]
+[gzserver-1] [INFO] [1795757270.551681961] [robot_5.turtlebot3_diff_drive]: Wheel pair 1 separation set to [0.160000m]
+[gzserver-1] [INFO] [1795757270.551752314] [robot_5.turtlebot3_diff_drive]: Wheel pair 1 diameter set to [0.066000m]
+[gzserver-1] [INFO] [1795757270.552457690] [robot_5.turtlebot3_diff_drive]: Subscribed to [/robot_5/cmd_vel]
+[gzserver-1] [INFO] [1795757270.553270890] [robot_5.turtlebot3_diff_drive]: Advertise odometry on [/robot_5/odom]
+[gzserver-1] [INFO] [1795757270.555552040] [robot_5.turtlebot3_diff_drive]: Publishing odom transforms between [robot_5/odom] and [robot_5/base_footprint]
+[gzserver-1] [INFO] [1795757270.564617060] [robot_5.turtlebot3_joint_state]: Going to publish joint [wheel_left_joint]
+[gzserver-1] [INFO] [1795757270.564678355] [robot_5.turtlebot3_joint_state]: Going to publish joint [wheel_right_joint]
+[INFO] [spawn_entity.py-23]: process has finished cleanly [pid 184659]
+[gzserver-1] [INFO] [1795757270.842842124] [robot_6.body_bumper]: Publishing contact states to [/robot_6/bumper_states]
+[gzserver-1] [INFO] [1795757270.854538111] [robot_6.turtlebot3_imu]: <initial_orientation_as_reference> is unset, using default value of false to comply with REP 145 (world as orientation reference)
+[spawn_entity.py-25] [INFO] [1795757270.946270601] [robot_6.spawn_entity]: Spawn status: SpawnEntity: Successfully spawned entity [robot_6]
+[gzserver-1] [INFO] [1795757271.055836131] [robot_6.turtlebot3_diff_drive]: Wheel pair 1 separation set to [0.160000m]
+[gzserver-1] [INFO] [1795757271.055907816] [robot_6.turtlebot3_diff_drive]: Wheel pair 1 diameter set to [0.066000m]
+[gzserver-1] [INFO] [1795757271.056773775] [robot_6.turtlebot3_diff_drive]: Subscribed to [/robot_6/cmd_vel]
+[gzserver-1] [INFO] [1795757271.057666574] [robot_6.turtlebot3_diff_drive]: Advertise odometry on [/robot_6/odom]
+[gzserver-1] [INFO] [1795757271.059432054] [robot_6.turtlebot3_diff_drive]: Publishing odom transforms between [robot_6/odom] and [robot_6/base_footprint]
+[gzserver-1] [INFO] [1795757271.070770399] [robot_6.turtlebot3_joint_state]: Going to publish joint [wheel_left_joint]
+[gzserver-1] [INFO] [1795757271.070823099] [robot_6.turtlebot3_joint_state]: Going to publish joint [wheel_right_joint]
+[INFO] [spawn_entity.py-25]: process has finished cleanly [pid 184687]
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[robot_state_publisher-16] [INFO] [1795757319.060397470] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-18] [INFO] [1795757319.060419892] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-20] [INFO] [1795757319.060425112] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-22] [INFO] [1795757319.060419912] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-3] [INFO] [1795757319.060490765] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[static_transform_publisher-9] [INFO] [1795757319.060491937] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-4] [INFO] [1795757319.060498840] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[static_transform_publisher-13] [INFO] [1795757319.060517465] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-7] [INFO] [1795757319.060516263] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-2] [INFO] [1795757319.060515772] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[static_transform_publisher-12] [INFO] [1795757319.060538325] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-14] [INFO] [1795757319.060450590] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[static_transform_publisher-11] [INFO] [1795757319.060986908] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-24]: sending signal 'SIGINT' to process[robot_state_publisher-24]
+[INFO] [robot_state_publisher-22]: sending signal 'SIGINT' to process[robot_state_publisher-22]
+[INFO] [robot_state_publisher-20]: sending signal 'SIGINT' to process[robot_state_publisher-20]
+[INFO] [robot_state_publisher-18]: sending signal 'SIGINT' to process[robot_state_publisher-18]
+[INFO] [robot_state_publisher-16]: sending signal 'SIGINT' to process[robot_state_publisher-16]
+[INFO] [robot_state_publisher-14]: sending signal 'SIGINT' to process[robot_state_publisher-14]
+[INFO] [static_transform_publisher-13]: sending signal 'SIGINT' to process[static_transform_publisher-13]
+[INFO] [static_transform_publisher-12]: sending signal 'SIGINT' to process[static_transform_publisher-12]
+[INFO] [static_transform_publisher-11]: sending signal 'SIGINT' to process[static_transform_publisher-11]
+[ERROR] [static_transform_publisher-13]: process has died [pid 184414, exit code -2, cmd '/opt/ros/humble/lib/tf2_ros/static_transform_publisher --frame-id world --child-frame-id robot_6/odom --ros-args -r __node:=world_to_robot_6_odom --params-file /tmp/launch_params_hqmj_4ch'].
+[INFO] [static_transform_publisher-10]: sending signal 'SIGINT' to process[static_transform_publisher-10]
+[ERROR] [static_transform_publisher-12]: process has died [pid 184376, exit code -2, cmd '/opt/ros/humble/lib/tf2_ros/static_transform_publisher --frame-id world --child-frame-id robot_5/odom --ros-args -r __node:=world_to_robot_5_odom --params-file /tmp/launch_params_ivev5ed3'].
+[INFO] [static_transform_publisher-9]: sending signal 'SIGINT' to process[static_transform_publisher-9]
+[ERROR] [static_transform_publisher-11]: process has died [pid 184345, exit code -2, cmd '/opt/ros/humble/lib/tf2_ros/static_transform_publisher --frame-id world --child-frame-id robot_4/odom --ros-args -r __node:=world_to_robot_4_odom --params-file /tmp/launch_params_68q6mf5i'].
+[INFO] [static_transform_publisher-8]: sending signal 'SIGINT' to process[static_transform_publisher-8]
+[ERROR] [static_transform_publisher-10]: process has died [pid 184343, exit code -2, cmd '/opt/ros/humble/lib/tf2_ros/static_transform_publisher --frame-id world --child-frame-id robot_3/odom --ros-args -r __node:=world_to_robot_3_odom --params-file /tmp/launch_params_8km0m_a2'].
+[INFO] [cell_follower-7]: sending signal 'SIGINT' to process[cell_follower-7]
+[ERROR] [static_transform_publisher-9]: process has died [pid 184341, exit code -2, cmd '/opt/ros/humble/lib/tf2_ros/static_transform_publisher --frame-id world --child-frame-id robot_2/odom --ros-args -r __node:=world_to_robot_2_odom --params-file /tmp/launch_params_1hcqbmhk'].
+[INFO] [cell_follower-6]: sending signal 'SIGINT' to process[cell_follower-6]
+[ERROR] [static_transform_publisher-8]: process has died [pid 184339, exit code -2, cmd '/opt/ros/humble/lib/tf2_ros/static_transform_publisher --frame-id world --child-frame-id robot_1/odom --ros-args -r __node:=world_to_robot_1_odom --params-file /tmp/launch_params_vm5v470z'].
+[INFO] [cell_follower-5]: sending signal 'SIGINT' to process[cell_follower-5]
+[INFO] [cell_follower-4]: sending signal 'SIGINT' to process[cell_follower-4]
+[INFO] [cell_follower-3]: sending signal 'SIGINT' to process[cell_follower-3]
+[INFO] [cell_follower-2]: sending signal 'SIGINT' to process[cell_follower-2]
+[INFO] [gzserver-1]: sending signal 'SIGINT' to process[gzserver-1]
+[robot_state_publisher-24] [INFO] [1795757319.061449168] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[static_transform_publisher-8] [INFO] [1795757319.062893524] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[static_transform_publisher-10] [INFO] [1795757319.063160286] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-6] [INFO] [1795757319.063282416] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-5] [INFO] [1795757319.063684512] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-24] [INFO] [1795757319.100650436] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-22] [INFO] [1795757319.104923292] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-20] [INFO] [1795757319.110816305] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-18] [INFO] [1795757319.115335074] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-16] [INFO] [1795757319.118928122] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-14] [INFO] [1795757319.122361900] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-7] [INFO] [1795757319.145850847] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-6] [INFO] [1795757319.149026039] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-5] [INFO] [1795757319.152370288] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-4] [INFO] [1795757319.156080085] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-3] [INFO] [1795757319.158878108] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[cell_follower-2] [INFO] [1795757319.161826513] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [cell_follower-4]: process has finished cleanly [pid 184331]
+[INFO] [cell_follower-3]: process has finished cleanly [pid 184329]
+[INFO] [robot_state_publisher-24]: process has finished cleanly [pid 184685]
+[INFO] [cell_follower-6]: process has finished cleanly [pid 184335]
+[INFO] [robot_state_publisher-22]: process has finished cleanly [pid 184657]
+[INFO] [robot_state_publisher-16]: process has finished cleanly [pid 184520]
+[INFO] [cell_follower-5]: process has finished cleanly [pid 184333]
+[INFO] [cell_follower-2]: process has finished cleanly [pid 184327]
+[INFO] [robot_state_publisher-20]: process has finished cleanly [pid 184629]
+[INFO] [cell_follower-7]: process has finished cleanly [pid 184337]
+[INFO] [robot_state_publisher-18]: process has finished cleanly [pid 184601]
+[INFO] [robot_state_publisher-14]: process has finished cleanly [pid 184470]
+[INFO] [gzserver-1]: process has finished cleanly [pid 184325]
