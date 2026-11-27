@@ -31,8 +31,9 @@ def _setup(context):
     rviz_path = os.path.join(tempfile.mkdtemp(prefix='mapf_replay_'), 'mapf.rviz')
     with open(rviz_path, 'w') as f:
         f.write(make_rviz(names, len(sc['map'][0]) * cell, h * cell))
-    actions.append(Node(package='rviz2', executable='rviz2', arguments=['-d', rviz_path], output='log',
-                        parameters=[{'use_sim_time': True}]))
+    if LaunchConfiguration('rviz').perform(context).lower() == 'true':
+        actions.append(Node(package='rviz2', executable='rviz2', arguments=['-d', rviz_path], output='log',
+                            parameters=[{'use_sim_time': True}]))
     bag = LaunchConfiguration('play').perform(context)
     if bag:
         actions.append(ExecuteProcess(cmd=['ros2', 'bag', 'play', bag, '--clock', '--rate',
@@ -45,5 +46,6 @@ def generate_launch_description():
         DeclareLaunchArgument('scenario', default_value='corridor10_r6_s1'),
         DeclareLaunchArgument('play', default_value='', description='녹화 폴더(주면 바로 재생)'),
         DeclareLaunchArgument('rate', default_value='1.0'),
+        DeclareLaunchArgument('rviz', default_value='true', description='false면 RViz 없이(시험용)'),
         OpaqueFunction(function=_setup),
     ])
