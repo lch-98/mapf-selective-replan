@@ -6,3 +6,5 @@ __pycache__/
 install/
 log/
 ros2/results/**/bag/
+# 사용자가 README 예시로 직접 돌린 실행 결과(my73, my_run, my_bag 등)는 올리지 않음
+ros2/my*/
