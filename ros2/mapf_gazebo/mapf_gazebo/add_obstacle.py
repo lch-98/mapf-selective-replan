@@ -7,6 +7,8 @@
   - 그 칸을 쓰는 모든 로봇이 계획 번호 3 이후에야 들어옴(생성 시각에 로봇이 그 칸에 있거나 들어가는 중이 아니게)
   - 그중 지나가는 로봇이 가장 많은 칸(같으면 가장 먼저 쓰이는 칸, 그다음 행·열이 작은 칸)
 생성 시각(spawn_time_s)에 그 칸을 누가 쓰고 있으면 실행기가 비워질 때까지 미룬다.
+
+--cell 열 행 으로 칸을 직접 고를 수도 있다(7-5 HOLD 장면처럼 "멀어서 늦게 보이는" 칸, 31.25). --suffix로 이름 끝(기본 _ob1).
 """
 import argparse
 import json
@@ -37,12 +39,21 @@ def main():
     ap.add_argument('scenario')
     ap.add_argument('--spawn', type=float, default=2.0, help='생성 시각(실행 시작 뒤 초)')
     ap.add_argument('--out', required=True)
+    ap.add_argument('--cell', type=int, nargs=2, metavar=('COL', 'ROW'), help='칸 직접 지정(열 행)')
+    ap.add_argument('--suffix', default='_ob1')
+    ap.add_argument('--min-index', type=int, default=3, help='자동 선택: 모든 로봇이 이 번호 이후에 들어오는 칸')
     a = ap.parse_args()
     sc = scenario_io.load(a.scenario)
-    cell, users = pick(sc)
+    if a.cell:
+        cell = tuple(a.cell)
+        if sc['map'][cell[1]][cell[0]] == '#':
+            raise SystemExit(f'{cell[1]}행 {cell[0]}열은 선반')
+        users = sum(1 for p in sc['initial_plan'].values() if any((x, y) == cell for x, y, _ in p))
+    else:
+        cell, users = pick(sc, a.min_index)
     sc['obstacles'] = [{'cell': [cell[0], cell[1]], 'spawn_time_s': a.spawn}]
-    sc['name'] = sc['name'] + '_ob1'
-    sc['note'] = (f"7-4: 처음 계획에서 로봇 {users}대가 지나가는 {cell[1]}행 {cell[0]}열에 {a.spawn}초에 상자 생성(add_obstacle). "
+    sc['name'] = sc['name'] + a.suffix
+    sc['note'] = (f"{'7-5' if a.cell else '7-4'}: 처음 계획에서 로봇 {users}대가 지나가는 {cell[1]}행 {cell[0]}열에 {a.spawn}초에 상자 생성(add_obstacle{' --cell' if a.cell else ''}). "
                   + sc.get('note', ''))
     with open(a.out, 'w') as f:
         json.dump(sc, f, ensure_ascii=False, indent=1)

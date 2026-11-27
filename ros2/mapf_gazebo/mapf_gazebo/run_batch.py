@@ -40,7 +40,10 @@ def main():
     ap.add_argument('--out-root', required=True)
     ap.add_argument('--record', action='store_true')
     ap.add_argument('--settle', type=float, default=8.0, help='launch 뒤 기다리는 초')
-    ap.add_argument('--extra', default='', help='run_7_4에 그대로 넘길 인자(예: "--t-wait 0")')
+    ap.add_argument('--extra', default='', help='run_7_4에 그대로 넘길 인자. -로 시작하면 = 로 붙일 것(예: --extra="--t-wait 0")')
+    ap.add_argument('--pass-through', action='store_true', help='곧은 길은 칸마다 서지 않음(31.24) — run_7_4 --pass-through')
+    ap.add_argument('--robust-estop', action='store_true', help='비상 정지 v2(31.24 보충) — launch robust_estop:=true')
+    ap.add_argument('--detection', choices=['simulated', 'lidar'], default='simulated', help='장애물 발견(31.25)')
     a = ap.parse_args()
     os.makedirs(a.out_root, exist_ok=True)
     for job in a.jobs:
@@ -50,7 +53,8 @@ def main():
             sys.exit(2)
         out = os.path.join(a.out_root, f'{scenario}_{method}')
         os.makedirs(out, exist_ok=True)
-        cmd = ['ros2', 'launch', 'mapf_gazebo', 'scenario.launch.py', f'scenario:={scenario}']
+        cmd = ['ros2', 'launch', 'mapf_gazebo', 'scenario.launch.py', f'scenario:={scenario}',
+               f'robust_estop:={str(a.robust_estop).lower()}']
         if a.record:
             cmd.append(f'record:={os.path.abspath(os.path.join(out, "bag"))}')
         with open(os.path.join(out, 'launch.log'), 'w') as log:
@@ -59,7 +63,8 @@ def main():
                 time.sleep(a.settle)
                 print(f'\n===== {scenario} [{method}] =====', flush=True)
                 subprocess.run(['ros2', 'run', 'mapf_gazebo', 'run_7_4', '--scenario', scenario, '--method', method,
-                                '--out-dir', out] + a.extra.split())
+                                '--out-dir', out] + a.extra.split() + (['--pass-through'] if a.pass_through else [])
+                               + ['--detection', a.detection])
             finally:
                 stop(proc)
     print('\n일괄 실행 끝, gzserver', '남아 있음!' if gz_running() else '없음')

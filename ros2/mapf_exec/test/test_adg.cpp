@@ -123,3 +123,51 @@ TEST(Adg, ServiceInTheMiddleWhenStartGiven) {
     EXPECT_EQ(g.actions()[r[1]].index, 1);
     EXPECT_EQ(g.actions()[r[1]].to, (GridCell{8, 4}));
 }
+
+// ── 곧게 지나가기(31.24): 하는 중인 이동의 다음 동작이 같은 방향이고 약속이 다 끝났으면 미리 내줄 수 있다 ──
+TEST(Adg, StraightNextOnlyForSameDirectionWhileMoving) {
+    Adg g(kCross, {});
+    const int c0 = g.robot_actions(0)[0], c1 = g.robot_actions(0)[1];
+    EXPECT_EQ(g.straight_next(0), -1);  // 하는 중인 동작이 없음
+    g.release(c0);
+    EXPECT_EQ(g.straight_next(0), c1);  // 1행 0열 → 1열 → 2열: 같은 방향
+    g.release(c1);                       // 미리 내줌
+    EXPECT_EQ(g.straight_next(0), -1);  // 한 칸 앞까지만
+    EXPECT_TRUE(std::find(g.releasable().begin(), g.releasable().end(), c1) == g.releasable().end());
+    g.done(c0);
+    EXPECT_TRUE(std::find(g.releasable().begin(), g.releasable().end(), c1) == g.releasable().end());  // 두 번 안 내줌
+    g.done(c1);
+    // 꺾는 길: 0행 0열 → 0행 1열 → 1행 1열
+    Adg t({{0, {{0, 0}, {1, 0}, {1, 1}}}}, {});
+    t.release(t.robot_actions(0)[0]);
+    EXPECT_EQ(t.straight_next(0), -1);
+    // 다음이 작업 동작이면 아님
+    Adg s({{0, {{0, 0}, {1, 0}}}}, {{0, 2}});
+    s.release(s.robot_actions(0)[0]);
+    EXPECT_EQ(s.straight_next(0), -1);
+}
+
+TEST(Adg, StraightNextWaitsForPromises) {
+    // A: 0행을 0열 → 2열. B는 0행 2열에 있다가 번호 0에 1행 2열로 → A가 0행 2열로 들어가는 동작(번호 1)은 B가 떠난 뒤
+    Adg g({{0, {{0, 0}, {1, 0}, {2, 0}}}, {1, {{2, 0}, {2, 1}, {2, 1}}}}, {});
+    const int a0 = g.robot_actions(0)[0], a1 = g.robot_actions(0)[1], b0 = g.robot_actions(1)[0];
+    ASSERT_EQ(g.cross_preds(a1), std::vector<int>{b0});
+    g.release(a0);
+    EXPECT_EQ(g.straight_next(0), -1);  // B가 아직 안 떠남
+    g.release(b0);
+    EXPECT_EQ(g.straight_next(0), -1);  // 떠나는 중(아직 다음 칸 중심 도착 전)
+    g.done(b0);
+    EXPECT_EQ(g.straight_next(0), a1);
+}
+
+TEST(Adg, UnreleaseReturnsActionToNotYet) {
+    Adg g(kCross, {});
+    const int c0 = g.robot_actions(0)[0], c1 = g.robot_actions(0)[1];
+    g.release(c0);
+    g.release(c1);
+    g.unrelease(c1);  // 미리 내준 것을 취소(예: 그 칸에서 장애물 발견)
+    EXPECT_FALSE(g.released(c1));
+    g.done(c0);
+    EXPECT_EQ(g.releasable(), std::vector<int>{c1});
+    EXPECT_THROW(g.unrelease(c0), std::logic_error);  // 끝난 동작은 취소 못 함
+}

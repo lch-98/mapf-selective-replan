@@ -97,3 +97,61 @@ TEST(FollowerControl, ClosedLoopReachesWithinThreeCentimeters) {
         }
     }
 }
+
+// ── 곧게 지나가기(31.24) ──
+TEST(FollowerControl, ContinuesStraightOnlyForSameDirection) {
+    const Segment east2{{0.75, 0.25}, {1.25, 0.25}}, north{{0.75, 0.25}, {0.75, 0.75}}, west{{0.75, 0.25}, {0.25, 0.25}};
+    const Segment east_gap{{1.25, 0.25}, {1.75, 0.25}};
+    EXPECT_TRUE(continues_straight(kEast, east2));
+    EXPECT_FALSE(continues_straight(kEast, north));     // 꺾음
+    EXPECT_FALSE(continues_straight(kEast, west));      // 되돌아감
+    EXPECT_FALSE(continues_straight(kEast, east_gap));  // 이어지지 않음
+    EXPECT_FALSE(continues_straight(kEast, {{0.75, 0.25}, {0.75, 0.25}}));
+}
+
+TEST(FollowerControl, CarryKeepsSpeedAndFinishesWhenPassingCenter) {
+    FollowerParams p;
+    p.max_linear = 0.22;
+    // 목표까지 10 cm: 이어지는 길이 없으면 감속(1.2 × 0.1 = 0.12 m/s), 있으면 최고 속도 유지
+    EXPECT_NEAR(follow_step({0.65, 0.25, 0.0}, kEast, Phase::kDrive, p).v, 0.12, 1e-9);
+    EXPECT_NEAR(follow_step({0.65, 0.25, 0.0}, kEast, Phase::kDrive, p, 0.5).v, 0.22, 1e-9);
+    // 목표 3 mm 앞: 예전 방식은 Done(stop_along 5 mm), 지나가기는 중심을 지날 때까지 계속
+    EXPECT_EQ(follow_step({0.747, 0.25, 0.0}, kEast, Phase::kDrive, p).phase, Phase::kDone);
+    EXPECT_EQ(follow_step({0.747, 0.25, 0.0}, kEast, Phase::kDrive, p, 0.5).phase, Phase::kDrive);
+    EXPECT_EQ(follow_step({0.7501, 0.25, 0.0}, kEast, Phase::kDrive, p, 0.5).phase, Phase::kDone);
+}
+
+// 곧은 두 칸을 이어서: 첫 칸 중심을 지날 때 속도가 거의 최고, 두 번째 칸 끝에서 3 cm 안에 섬
+TEST(FollowerControl, ClosedLoopPassesThroughStraightCells) {
+    const Segment east2{{0.75, 0.25}, {1.25, 0.25}};
+    for (double vmax : {0.12, 0.22}) {
+        FollowerParams p;
+        p.max_linear = vmax;
+        const double dt = 0.05, accel = 0.5;
+        Pose2 pose{0.25, 0.25, 0.0};
+        double v = 0.0, pass_speed = -1.0, max_cross = 0.0;
+        Phase ph = Phase::kRotate;
+        int seg = 0;
+        for (int i = 0; i < 2000 && seg < 2; ++i) {
+            const Segment& s = seg == 0 ? kEast : east2;
+            auto out = follow_step(pose, s, ph, p, seg == 0 ? segment_length(east2) : 0.0);
+            ph = out.phase;
+            if (ph == Phase::kDone) {
+                if (seg == 0) pass_speed = v;
+                ++seg;
+                ph = Phase::kDrive;
+                if (seg == 2) break;
+                continue;  // 같은 tick에 다음 구간으로(follower와 같게)
+            }
+            v += std::clamp(out.v - v, -accel * dt, accel * dt);
+            pose.x += v * std::cos(pose.yaw) * dt;
+            pose.y += v * std::sin(pose.yaw) * dt;
+            pose.yaw = wrap_angle(pose.yaw + out.w * dt);
+            max_cross = std::max(max_cross, std::abs(segment_error(pose, s).cross));
+        }
+        EXPECT_EQ(seg, 2);
+        EXPECT_GT(pass_speed, 0.9 * vmax) << vmax;  // 첫 칸 중심에서 안 섬
+        EXPECT_LT(std::hypot(1.25 - pose.x, 0.25 - pose.y), 0.03) << vmax;
+        EXPECT_LT(max_cross, 0.01);
+    }
+}

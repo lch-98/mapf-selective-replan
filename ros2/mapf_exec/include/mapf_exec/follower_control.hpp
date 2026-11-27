@@ -9,6 +9,10 @@
 //           방향 차이가 rotate_again보다 커지면 다시 Rotate(안전).
 //   Done  : 멈춤.
 // 칸 중심선 위로만 다니고 칸 중심에서만 돌아야 몸이 "가진 칸" 밖으로 안 나간다(31.4 (다)).
+//
+// 곧게 지나가기(31.24): carry > 0이면 목표 칸 다음에 같은 방향으로 carry(m)만큼 더 간다는 뜻이다(다음 동작을 이미 받음).
+//   그때는 남은 거리 + carry로 감속을 계산하고(목표에서 서지 않음), 목표 중심을 지나는 순간(along <= 0) Done.
+//   carry = 0이면 예전과 똑같다.
 #pragma once
 
 #include "mapf_exec/geometry.hpp"
@@ -50,6 +54,10 @@ struct SegmentError {
 SegmentError segment_error(const Pose2& pose, const Segment& seg);
 
 // start == goal(제자리)이면 바로 Done.
-ControlOutput follow_step(const Pose2& pose, const Segment& seg, Phase phase, const FollowerParams& p);
+ControlOutput follow_step(const Pose2& pose, const Segment& seg, Phase phase, const FollowerParams& p, double carry = 0.0);
+
+// next가 cur에 곧게 이어지나: next 출발 = cur 목표(tol 안), 두 구간 방향이 같음(1° 안). 길이 0인 구간은 아님.
+bool continues_straight(const Segment& cur, const Segment& next, double tol = 0.01);
+double segment_length(const Segment& s);
 
 }  // namespace mapf_exec

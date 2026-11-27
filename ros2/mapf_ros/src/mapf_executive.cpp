@@ -1,22 +1,28 @@
 // mapf_executive — 저장된 처음 계획을 ADG로 실행하고, 장애물이 나타나면 다시 계획한다 (docs/31 31.4~31.6, 31.22, 31.23).
 //
 //   ros2 run mapf_ros mapf_executive --ros-args -p use_sim_time:=true -p scenario:=<시나리오.json> -p out_dir:=<폴더>
-//        [-p method:=ours|full] [-p d_detect:=2.0] [-p t_wait:=3.0]
+//        [-p method:=ours|full] [-p d_detect:=2.0] [-p t_wait:=3.0] [-p detection:=simulated|lidar] [-p pass_through:=false]
 //
 // 1. 시나리오 JSON의 initial_plan(make_scenario가 코어 plan()이 성공할 때까지 다시 뽑아 저장한 것)을 읽는다. 실행 중 plan()은 안 부른다.
 // 2. 계획 검사 (가) 통과 → ADG → 내줄 수 있는 동작을 /robot_i/mapf/action으로 보냄 → DONE 받으면 다음.
 // 3. 장애물(7-4, 31.5): 시나리오 obstacles[]의 시각에 상자 생성(그 칸을 누가 쓰고 있으면 비워질 때까지 미룸).
-//    발견 흉내: 어떤 로봇 중심이 칸 중심에서 d_detect 안이고 사이에 선반이 없으면 발견. 발견 뒤에는 그 칸으로 들어가는 동작을 안 내줌(보류).
-//    발견 + t_wait초 = 확정 → 새 동작 시작 금지 → 이동 중인 로봇이 다 칸 중심에 서면:
+//    detection:=simulated(7-4, 기본): 어떤 로봇 중심이 칸 중심에서 d_detect 안이고 사이에 선반이 없으면 발견, 발견 + t_wait초 = 확정.
+//    detection:=lidar(7-5, 31.25): 로봇마다 /robot_i/scan 점 → 지도에 없는 물체 칸(mapf_exec::unknown_cells, 다른 로봇 ± 0.2 m 점은 버림)
+//      → 처음 보이면 발견, t_wait 동안 0.2초 칸의 90% 이상에서 보이면 확정, 모자라면 버림(ObstacleConfirmer). 시나리오에 없는 칸이 확정되면
+//      "오탐"(phantom)으로 세고 그래도 재계획한다(실제 시스템처럼). 비교용으로 흉내 규칙의 발견 시각(sim_detect_s)도 같이 적는다.
+//    발견 뒤에는 그 칸으로 들어가는 동작을 안 내줌(보류). 확정 → 새 동작 시작 금지 → 이동 중인 로봇이 다 칸 중심에 서면:
 //    번호 다시 붙이기(mapf_exec::retime) → 코어 replan()(우리 방법) 또는 full_replan() → 계획 검사 → 새 ADG → 다시 출발.
 // 4. 상태(로봇마다): MOVE 이동 / WORK 작업 / YIELD 약속 때문에 서서 기다림(양보) / HOLD 장애물 앞 보류 / STOP 재계획 대기 /
 //    DONE 끝 / ESTOP 비상 정지. run.csv에 남기고, RViz 마커(/mapf/markers)로 보여 준다.
 // 5. 기록(out_dir): run.csv, map.txt, executive.json(동작 시각, 기다린 시간, 접촉, 칸 사용 순서, 장애물·재계획 사건).
+// 6. 곧게 지나가기(pass_through:=true, 31.24, 기본 꺼짐): 이동 동작을 하는 중인 로봇의 다음 동작이 같은 방향 이동이고 약속이 다 지켜졌으면
+//    미리 보낸다 → follower가 칸 중심에서 서지 않고 지나감. 미리 보낸 동작의 칸에서 장애물이 발견되면 CANCEL(시작 전이면 follower가 버림).
 // debug_drop_cross_edges=true는 변이 검사용(약속을 뺌). 실험에 쓰지 말 것.
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -33,12 +39,14 @@
 #include "mapf/task_schedule.hpp"
 #include "mapf_exec/adg.hpp"
 #include "mapf_exec/geometry.hpp"
+#include "mapf_exec/lidar_detect.hpp"
 #include "mapf_exec/plan_check.hpp"
 #include "mapf_exec/retime.hpp"
 #include "mapf_ros_msgs/msg/action_command.hpp"
 #include "mapf_ros_msgs/msg/action_status.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/laser_scan.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
 using json = nlohmann::json;
@@ -60,10 +68,17 @@ struct Robot {
     rclcpp::Subscription<ActionStatus>::SharedPtr status_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub;
     rclcpp::Subscription<gazebo_msgs::msg::ContactsState>::SharedPtr bump_sub;
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub;
     std::optional<mapf_exec::Pose2> pose;
+    std::deque<std::pair<double, mapf_exec::Pose2>> history;  // (시뮬레이터 시각, 자세) 최근 3초 — 스캔 시각의 자세를 찾으려고
+    long scans{0};
     uint32_t next_seq{0};                // follower는 더 큰 seq만 받으므로 재계획 뒤에도 계속 늘린다
     int active{-1};                      // 지금 ADG에서 하는 동작
     uint32_t active_seq{0};
+    int queued{-1};                      // 곧게 지나가기: 미리 보낸 다음 동작(아직 follower가 시작 전일 수 있음)
+    uint32_t queued_seq{0};
+    bool cancel_sent{false};
+    int passes{0}, cancels{0};
     double service_end_s{-1.0};          // 하는 중인 작업이 끝나는 시각(시작 기준 초)
     std::optional<uint32_t> legacy_seq;  // 재계획 전 ADG에서 시작한 작업(끝날 때까지 다음 동작 안 내줌)
     GridCell at{};
@@ -78,8 +93,11 @@ struct Obstacle {
     GridCell cell{};
     double spawn_at_s{0.0};
     double spawned_s{-1.0}, detected_s{-1.0}, confirmed_s{-1.0}, replanned_s{-1.0};
-    std::string detected_by;
+    double sim_detect_s{-1.0}, first_detect_s{-1.0};  // 흉내 규칙의 발견 시각(비교용), 맨 처음 발견(버려졌다 다시 보여도 유지)
+    std::string detected_by, sim_detected_by;
     bool spawn_requested{false};
+    bool phantom{false};  // LiDAR가 찾았지만 시나리오에 없는 칸(오탐)
+    int drops{0}, bins_seen{0}, bins_total{0};
     json event = json::object();
 };
 
@@ -128,6 +146,13 @@ public:
         method_ = declare_parameter("method", std::string("ours"));
         d_detect_ = declare_parameter("d_detect", 2.0);
         t_wait_ = declare_parameter("t_wait", 3.0);
+        pass_through_ = declare_parameter("pass_through", false);
+        detection_ = declare_parameter("detection", std::string("simulated"));
+        lidar_.d_detect = d_detect_;
+        lidar_.min_points = declare_parameter("lidar_min_points", 3);
+        lidar_.robot_filter_r = declare_parameter("lidar_robot_filter_r", 0.2);
+        if (detection_ != "simulated" && detection_ != "lidar") throw std::runtime_error("detection은 simulated 또는 lidar");
+        confirmer_ = std::make_unique<mapf_exec::ObstacleConfirmer>(t_wait_);
         start_wait_s_ = declare_parameter("start_wait_s", 60.0);
         total_timeout_s_ = declare_parameter("total_timeout_s", 1800.0);
         const double rate = declare_parameter("rate_hz", 20.0);
@@ -178,9 +203,10 @@ public:
         for (const auto& v : violations_) RCLCPP_ERROR(get_logger(), "계획 검사 실패: %s", v.describe().c_str());
         set_plan(paths, service, {});
         if (drop_) RCLCPP_WARN(get_logger(), "변이 검사용: 로봇 사이 약속을 모두 뺐다(부딪혀야 정상)");
-        RCLCPP_INFO(get_logger(), "시나리오 %s: 로봇 %zu대, 동작 %zu개, 약속 %d개, 장애물 %zu개, 재계획 방법 %s",
+        RCLCPP_INFO(get_logger(), "시나리오 %s: 로봇 %zu대, 동작 %zu개, 약속 %d개, 장애물 %zu개, 재계획 방법 %s, 곧게 지나가기 %s",
                     sc_.at("name").get<std::string>().c_str(), robots_.size(), adg_->actions().size(),
-                    adg_->num_cross_edges(), obstacles_.size(), method_.c_str());
+                    adg_->num_cross_edges(), obstacles_.size(), method_.c_str(), pass_through_ ? "켬" : "끔");
+        RCLCPP_INFO(get_logger(), "장애물 발견: %s (d_detect %.1f m, t_wait %.1f초)", detection_.c_str(), d_detect_, t_wait_);
 
         const auto rel = rclcpp::QoS(50).reliable();
         for (auto& [id, rb] : robots_) {
@@ -193,7 +219,15 @@ public:
                     const auto& q = m->pose.pose.orientation;
                     r->pose = mapf_exec::Pose2{m->pose.pose.position.x, m->pose.pose.position.y,
                                                std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
+                    const double ts = rclcpp::Time(m->header.stamp).seconds();
+                    r->history.emplace_back(ts, *r->pose);
+                    while (!r->history.empty() && r->history.front().first < ts - 3.0) r->history.pop_front();
                 });
+            if (detection_ == "lidar") {
+                rb.scan_sub = create_subscription<sensor_msgs::msg::LaserScan>(
+                    "/" + rb.name + "/scan", rclcpp::SensorDataQoS(),
+                    [this, r](sensor_msgs::msg::LaserScan::ConstSharedPtr m) { on_scan(*r, m); });
+            }
             rb.bump_sub = create_subscription<gazebo_msgs::msg::ContactsState>(
                 "/" + rb.name + "/bumper_states", rclcpp::SensorDataQoS(),
                 [this, r](gazebo_msgs::msg::ContactsState::ConstSharedPtr m) { on_contact(*r, *m); });
@@ -255,12 +289,33 @@ private:
             r.last_done_s = t;
             return;
         }
+        if (m.state == ActionStatus::CANCELED) {  // 미리 보낸 동작을 follower가 시작 전에 버림 → ADG에서도 되돌림
+            if (r.queued >= 0 && m.seq == r.queued_seq) {
+                adg_->unrelease(r.queued);
+                r.queued = -1;
+                r.cancel_sent = false;
+                r.cancels++;
+            }
+            return;
+        }
         if (r.active < 0 || m.seq != r.active_seq) return;
         const int a = r.active;
         const auto& A = adg_->actions()[a];
         if (m.state == ActionStatus::DONE) {
             adg_->done(a);
+            const bool passed = r.queued >= 0;
             r.active = -1;
+            if (passed) {  // 곧게 지나감: follower가 이미 다음 동작을 시작했다
+                if (r.cancel_sent && enters_detected_obstacle(adg_->actions()[r.queued])) {  // 재계획 대기 취소가 늦은 것은 괜찮음
+                    RCLCPP_WARN(get_logger(), "%s: 취소가 늦어 장애물 칸으로 가는 동작을 이미 시작함", r.name.c_str());
+                    late_cancels_++;
+                }
+                r.active = r.queued;
+                r.active_seq = r.queued_seq;
+                r.queued = -1;
+                r.cancel_sent = false;
+                r.passes++;
+            }
             r.service_end_s = -1;
             r.at = A.to;
             r.last_done_s = t;
@@ -268,13 +323,88 @@ private:
             if (A.kind == AdgAction::Kind::kMove) entered_[cell_str(A.to)].push_back({t, r.id});
             action_log_.push_back({{"robot", r.name}, {"plan_epoch", plan_epoch_ - 1}, {"index", A.index},
                                    {"kind", A.kind == AdgAction::Kind::kMove ? "MOVE" : "SERVICE"},
-                                   {"to", {A.to.x, A.to.y}}, {"plan_t", A.plan_t}, {"done_s", t}, {"pos_err_m", m.pos_err_m}});
+                                   {"to", {A.to.x, A.to.y}}, {"plan_t", A.plan_t}, {"done_s", t}, {"pos_err_m", m.pos_err_m},
+                                   {"passed_through", passed}});
         } else {
             r.estop = m.state == ActionStatus::ESTOP;
             abort_reason_ = r.name + (r.estop ? " 비상 정지" : " 보류(HELD)") + " — 동작 " + std::to_string(A.index);
             RCLCPP_ERROR(get_logger(), "%s", abort_reason_.c_str());
             stop(false);
         }
+    }
+
+    // 시각 ts의 자세(기록 사이를 직선으로 이음). 기록이 없으면 지금 자세
+    static std::optional<mapf_exec::Pose2> pose_at(const Robot& r, double ts) {
+        if (r.history.empty()) return r.pose;
+        if (ts <= r.history.front().first) return r.history.front().second;
+        if (ts >= r.history.back().first) return r.history.back().second;
+        for (std::size_t i = 1; i < r.history.size(); ++i) {
+            const auto& [t1, p1] = r.history[i];
+            if (t1 < ts) continue;
+            const auto& [t0, p0] = r.history[i - 1];
+            const double u = t1 > t0 ? (ts - t0) / (t1 - t0) : 0.0;
+            return mapf_exec::Pose2{p0.x + u * (p1.x - p0.x), p0.y + u * (p1.y - p0.y),
+                                    mapf_exec::wrap_angle(p0.yaw + u * mapf_exec::wrap_angle(p1.yaw - p0.yaw))};
+        }
+        return r.history.back().second;
+    }
+
+    // 지금 알고 있는 지도: 선반 + 확정된 장애물(재계획 전이어도)
+    std::vector<std::string> known_rows() const {
+        auto rows = rows_;
+        for (const auto& o : obstacles_) {
+            if (o.confirmed_s >= 0) rows[o.cell.y][o.cell.x] = '#';
+        }
+        return rows;
+    }
+
+    // ── LiDAR 발견(7-5) ──
+    // 스캔은 바로 쓰지 않고 모아 둔다: 스캔이 그 시각의 odom보다 먼저 도착하면 회전 중인 로봇의 옛 자세로 점을 놓아
+    // 선반 점이 빈칸으로 간다(31.25, 실제로 겪음). 모든 로봇의 odom이 스캔 시각을 넘어선 뒤 사이를 이어(보간) 처리한다.
+    void on_scan(Robot& r, sensor_msgs::msg::LaserScan::ConstSharedPtr m) {
+        if (!started_ || finished_) return;
+        pending_scans_.push_back({&r, m});
+    }
+
+    void process_scans() {
+        double covered = 1e18;
+        for (const auto& [id, o] : robots_) covered = std::min(covered, o.history.empty() ? -1.0 : o.history.back().first);
+        while (!pending_scans_.empty()) {
+            auto [r, m] = pending_scans_.front();
+            const double ts = rclcpp::Time(m->header.stamp).seconds();
+            if (ts > covered && now().seconds() - ts < 0.5) break;  // 아직 odom이 안 따라옴(0.5초 넘게 밀리면 그냥 처리)
+            if (ts > covered) late_scans_++;
+            pending_scans_.pop_front();
+            scan_one(*r, *m, ts);
+        }
+    }
+
+    void scan_one(Robot& r, const sensor_msgs::msg::LaserScan& m, double ts) {
+        const auto me = pose_at(r, ts);
+        if (!me) return;
+        std::vector<mapf_exec::Vec2> others;
+        for (const auto& [id, o] : robots_) {
+            if (&o == &r) continue;
+            if (const auto p = pose_at(o, ts)) others.push_back({p->x, p->y});
+        }
+        mapf_exec::ScanData sd;
+        sd.angle_min = m.angle_min;
+        sd.angle_increment = m.angle_increment;
+        sd.range_min = m.range_min;
+        sd.range_max = m.range_max;
+        sd.ranges = m.ranges;
+        const auto cells = mapf_exec::unknown_cells(*me, sd, others, known_rows(), cell_, lidar_);
+        std::vector<GridCell> seen;
+        for (const auto& [xy, n] : cells) {
+            const GridCell g{xy.first, xy.second};
+            if (cell_in_use(g)) {  // 로봇이 가진 칸은 장애물일 수 없음(생성 규칙) — 걸러진 로봇 점이 남은 것. 세기만 함
+                held_cell_hits_++;
+                continue;
+            }
+            seen.push_back(g);
+        }
+        r.scans++;
+        confirmer_->observe(ts - t0_, seen, r.name);
     }
 
     void on_contact(Robot& r, const gazebo_msgs::msg::ContactsState& m) {
@@ -294,6 +424,7 @@ private:
                 const auto& A = adg_->actions()[r.active];
                 if (A.from == c || A.to == c) return true;
             }
+            if (r.queued >= 0 && adg_->actions()[r.queued].to == c) return true;
         }
         return false;
     }
@@ -316,7 +447,7 @@ private:
         const double t = rel_now();
         for (std::size_t k = 0; k < obstacles_.size(); ++k) {
             auto& o = obstacles_[k];
-            if (!o.spawn_requested && t >= o.spawn_at_s) {
+            if (!o.phantom && !o.spawn_requested && t >= o.spawn_at_s) {
                 if (cell_in_use(o.cell)) continue;  // 로봇 위에 상자를 만들 수는 없음 → 비워질 때까지 미룸
                 auto req = std::make_shared<gazebo_msgs::srv::SpawnEntity::Request>();
                 req->name = "obstacle_" + std::to_string(k);
@@ -335,22 +466,83 @@ private:
                 o.spawned_s = t;
                 RCLCPP_INFO(get_logger(), "장애물 %zu 생성: %d행 %d열 (%.1f초)", k, o.cell.y, o.cell.x, t);
             }
-            if (o.spawned_s >= 0 && o.detected_s < 0) {
+            if (o.spawned_s >= 0 && o.sim_detect_s < 0) {  // 흉내 규칙(7-4). lidar 모드에서는 비교용 기록만
                 for (auto& [id, r] : robots_) {
                     if (!r.pose) continue;
                     const auto c = mapf_exec::cell_center(o.cell, height_, cell_);
                     if (std::hypot(c.x - r.pose->x, c.y - r.pose->y) <= d_detect_ && line_of_sight(*r.pose, o.cell)) {
-                        o.detected_s = t;
-                        o.detected_by = r.name;
-                        RCLCPP_INFO(get_logger(), "장애물 %zu 발견: %s (%.1f초)", k, r.name.c_str(), t);
+                        o.sim_detect_s = t;
+                        o.sim_detected_by = r.name;
+                        if (detection_ == "simulated") {
+                            o.detected_s = o.first_detect_s = t;
+                            o.detected_by = r.name;
+                            RCLCPP_INFO(get_logger(), "장애물 %zu 발견: %s (%.1f초)", k, r.name.c_str(), t);
+                        }
                         break;
                     }
                 }
             }
-            if (o.detected_s >= 0 && o.confirmed_s < 0 && t >= o.detected_s + t_wait_ && replanning_ < 0) {
+            if (detection_ == "simulated" && o.detected_s >= 0 && o.confirmed_s < 0 && t >= o.detected_s + t_wait_ &&
+                replanning_ < 0) {
                 o.confirmed_s = t;
                 replanning_ = static_cast<int>(k);
                 RCLCPP_INFO(get_logger(), "장애물 %zu 확정(%.1f초): 새 동작 멈추고 이동 중인 로봇을 기다림", k, t);
+            }
+        }
+        if (detection_ == "lidar") {
+            process_scans();
+            lidar_events(t);
+        }
+    }
+
+    int find_obstacle(GridCell c, bool want_detected) const {
+        for (std::size_t k = 0; k < obstacles_.size(); ++k) {
+            const auto& o = obstacles_[k];
+            if (o.cell == c && o.confirmed_s < 0 && (o.detected_s >= 0) == want_detected && (o.phantom || o.spawned_s >= 0)) {
+                return static_cast<int>(k);
+            }
+        }
+        return -1;
+    }
+
+    void lidar_events(double t) {
+        confirmer_->set_hold_confirm(replanning_ >= 0);  // 다른 장애물 재계획 중이면 확정을 미룸
+        for (const auto& ev : confirmer_->update(t)) {
+            using K = mapf_exec::ObstacleConfirmer::Event::Kind;
+            if (ev.kind == K::kDetected) {
+                int k = find_obstacle(ev.cell, false);
+                if (k < 0) {  // 시나리오에 없는(또는 아직 안 생긴) 칸 → 오탐 후보
+                    Obstacle ph;
+                    ph.cell = ev.cell;
+                    ph.phantom = true;
+                    obstacles_.push_back(ph);
+                    k = static_cast<int>(obstacles_.size()) - 1;
+                }
+                auto& o = obstacles_[k];
+                o.detected_s = ev.t;
+                if (o.phantom) phantom_detections_++;
+                if (o.first_detect_s < 0) o.first_detect_s = ev.t;
+                o.detected_by = ev.by;
+                RCLCPP_INFO(get_logger(), "장애물 %d 발견(LiDAR%s): %s, %d행 %d열 (%.1f초)", k, o.phantom ? ", 시나리오에 없음" : "",
+                            ev.by.c_str(), ev.cell.y, ev.cell.x, ev.t);
+                continue;
+            }
+            const int k = find_obstacle(ev.cell, true);
+            if (k < 0) continue;
+            auto& o = obstacles_[k];
+            o.bins_seen = ev.bins_seen;
+            o.bins_total = ev.bins_total;
+            if (ev.kind == K::kDropped) {
+                o.detected_s = -1;
+                o.drops++;
+                RCLCPP_INFO(get_logger(), "장애물 %d 후보 버림: %d/%d칸만 보임 (%.1f초)", k, ev.bins_seen, ev.bins_total, t);
+            } else {
+                o.confirmed_s = t;
+                replanning_ = k;
+                if (o.phantom) phantoms_confirmed_++;
+                RCLCPP_INFO(get_logger(), "장애물 %d 확정(LiDAR %d/%d칸, %.1f초)%s: 새 동작 멈추고 이동 중인 로봇을 기다림", k,
+                            ev.bins_seen, ev.bins_total, t, o.phantom ? " — 오탐!" : "");
+                confirmer_->set_hold_confirm(true);  // 한 번에 하나씩
             }
         }
     }
@@ -424,8 +616,39 @@ private:
 
         o.event = {{"cell", {o.cell.x, o.cell.y}}, {"spawn_s", o.spawned_s}, {"detect_s", o.detected_s},
                    {"detected_by", o.detected_by}, {"confirm_s", o.confirmed_s}, {"replan_s", t},
+                   {"detection", detection_}, {"sim_detect_s", o.sim_detect_s}, {"sim_detected_by", o.sim_detected_by},
+                   {"first_detect_s", o.first_detect_s}, {"drops", o.drops}, {"bins_seen", o.bins_seen},
+                   {"bins_total", o.bins_total}, {"phantom", o.phantom},
                    {"method", method_}, {"compute_ms", ms}, {"success", static_cast<bool>(new_paths)}};
         o.event.update(info);
+        {  // ②~④ 입력·출력 저장(31.6): 같은 입력을 2D 파이썬(mapf_py)으로 다시 돌려 같은 결과인지 확인(check_replan_input)
+            json in_agents = json::array(), in_prev = json::object(), in_sched = json::object(), out_paths = json::object();
+            for (const auto& a : agents) {
+                in_agents.push_back({{"id", a.id}, {"start", {a.start.x, a.start.y}}, {"goal", {a.goal.x, a.goal.y}},
+                                     {"service_time", a.service_time}});
+            }
+            for (const auto& [id, p] : prev) {
+                json q = json::array();
+                for (const auto& c : p) q.push_back({c.x, c.y, c.t});
+                in_prev[std::to_string(id)] = q;
+            }
+            for (const auto& [id, w] : schedule) in_sched[std::to_string(id)] = {w.start, w.end};
+            if (new_paths) {
+                for (const auto& [id, p] : *new_paths) {
+                    json q = json::array();
+                    for (const auto& c : p) q.push_back({c.x, c.y, c.t});
+                    out_paths[std::to_string(id)] = q;
+                }
+            }
+            const json dump = {{"format", "mapf_replan_input_v1"}, {"method", method_}, {"map", rows_with_obstacles(false)},
+                               {"agents", in_agents}, {"previous_paths", in_prev}, {"previous_schedule", in_sched},
+                               {"new_obstacles", {{o.cell.x, o.cell.y}}}, {"current_time", 0},
+                               {"config", {{"order", "fixed_first"}, {"check_reachability", true},
+                                           {"rescue_selection", "shortest_path_conflicts"}, {"max_escalation_tiers", 2},
+                                           {"order_restarts", 3}}},
+                               {"result", {{"success", static_cast<bool>(new_paths)}, {"paths", out_paths}}}};
+            std::ofstream(out_dir_ + "/replan_" + std::to_string(replans_) + ".json") << dump.dump(1);
+        }
         if (!new_paths) {
             abort_reason_ = "재계획 실패(" + method_ + ")";
             RCLCPP_ERROR(get_logger(), "%s", abort_reason_.c_str());
@@ -507,6 +730,43 @@ private:
             r.active = a;
             r.active_seq = c.seq;
             r.pub->publish(c);
+        }
+        if (!pass_through_) return;
+        // 곧게 지나가기: 이동 중인 로봇의 다음 같은 방향 이동을 미리 보냄(약속은 이미 다 지켜짐 — Adg::straight_next)
+        for (auto& [id, r] : robots_) {
+            if (r.active < 0 || r.queued >= 0 || r.legacy_seq) continue;
+            const int b = adg_->straight_next(id);
+            if (b < 0 || enters_detected_obstacle(adg_->actions()[b])) continue;
+            const auto& B = adg_->actions()[b];
+            ActionCommand c;
+            c.seq = r.next_seq++;
+            c.kind = ActionCommand::MOVE;
+            c.cell_x = B.to.x;
+            c.cell_y = B.to.y;
+            const auto fa = mapf_exec::cell_center(B.from, height_, cell_), fb = mapf_exec::cell_center(B.to, height_, cell_);
+            c.from_x = fa.x;
+            c.from_y = fa.y;
+            c.target_x = fb.x;
+            c.target_y = fb.y;
+            adg_->release(b);
+            r.queued = b;
+            r.queued_seq = c.seq;
+            r.pub->publish(c);
+        }
+    }
+
+    // 미리 보낸 동작의 칸에서 장애물이 발견되면 취소 요청(follower가 아직 시작 전이면 CANCELED로 답함).
+    // 장애물이 확정되어 재계획을 기다리는 중이면 미리 보낸 동작을 모두 취소 → 로봇이 지금 목표 칸에서 바로 섬(31.6 ①을 빨리)
+    void cancel_into_obstacles() {
+        for (auto& [id, r] : robots_) {
+            if (r.queued < 0 || r.cancel_sent) continue;
+            if (replanning_ < 0 && !enters_detected_obstacle(adg_->actions()[r.queued])) continue;
+            ActionCommand c;
+            c.seq = r.queued_seq;
+            c.kind = ActionCommand::CANCEL;
+            r.pub->publish(c);
+            r.cancel_sent = true;
+            RCLCPP_INFO(get_logger(), "%s: 미리 보낸 동작 취소 요청(%s)", r.name.c_str(), replanning_ >= 0 ? "재계획 대기" : "장애물 칸");
         }
     }
 
@@ -618,11 +878,17 @@ private:
         arr.markers.push_back(sh);
         int k = 0;
         for (const auto& o : obstacles_) {  // 장애물: 생성만 됨(분홍) / 발견됨(빨강)
-            if (o.spawned_s < 0) continue;
+            if (o.spawned_s < 0 && !(o.phantom && (o.detected_s >= 0 || o.confirmed_s >= 0))) continue;
             Marker m = base("obstacles", k++, Marker::CUBE);
             m.pose.position = pt(mapf_exec::cell_center(o.cell, height_, cell_), 0.2);
             m.scale.x = m.scale.y = m.scale.z = 0.4;
-            color(m, o.detected_s < 0 ? std::array<float, 3>{0.9f, 0.5f, 0.6f} : std::array<float, 3>{0.9f, 0.05f, 0.05f}, 0.9f);
+            if (o.phantom) {  // 오탐(시나리오에 없는 칸): 노랑 반투명
+                color(m, {1.0f, 0.9f, 0.1f}, 0.5f);
+            } else {
+                color(m, o.detected_s < 0 && o.confirmed_s < 0 ? std::array<float, 3>{0.9f, 0.5f, 0.6f}
+                                                                : std::array<float, 3>{0.9f, 0.05f, 0.05f},
+                      0.9f);
+            }
             arr.markers.push_back(m);
         }
         for (auto& [id, r] : robots_) {
@@ -707,6 +973,7 @@ private:
         }
         const double t = rel_now();
         update_obstacles();
+        cancel_into_obstacles();
         if (replanning_ >= 0) {
             bool moving = false;
             for (auto& [id, r] : robots_) {
@@ -759,23 +1026,30 @@ private:
         int estops = 0;
         for (auto& [id, r] : robots_) {
             robots[r.name] = {{"finish_s", r.finish_s}, {"adg_wait_s", r.adg_wait_s}, {"max_pos_err_m", r.max_pos_err},
-                              {"contacts", r.contacts}, {"state_time_s", r.state_time}, {"estop", r.estop}};
+                              {"contacts", r.contacts}, {"state_time_s", r.state_time}, {"estop", r.estop},
+                              {"passes", r.passes}, {"cancels", r.cancels}, {"scans", r.scans}};
             makespan = std::max(makespan, r.finish_s);
             contacts += r.contacts;
             estops += r.estop ? 1 : 0;
         }
         json obs = json::array();
         for (const auto& o : obstacles_) {
-            obs.push_back(o.event.empty() ? json{{"cell", {o.cell.x, o.cell.y}}, {"spawn_s", o.spawned_s}, {"detect_s", o.detected_s}}
+            obs.push_back(o.event.empty() ? json{{"cell", {o.cell.x, o.cell.y}}, {"spawn_s", o.spawned_s}, {"detect_s", o.detected_s},
+                                                 {"sim_detect_s", o.sim_detect_s}, {"first_detect_s", o.first_detect_s},
+                                                 {"drops", o.drops}, {"phantom", o.phantom}, {"detection", detection_}}
                                           : o.event);
         }
-        ok_ = all_done && violations_.empty() && contacts == 0 && mismatches.empty() && estops == 0;
+        ok_ = all_done && violations_.empty() && contacts == 0 && mismatches.empty() && estops == 0 && late_cancels_ == 0 &&
+              phantoms_confirmed_ == 0;
         json out = {{"scenario", sc_.at("name")}, {"method", method_}, {"all_done", all_done}, {"abort_reason", abort_reason_},
                     {"plan_check_violations", violations_.size()}, {"makespan_s", makespan},
                     {"plan_makespan_steps", initial_plan_steps_}, {"plan_makespan_s_at_dt_nom", initial_plan_steps_ * dt_nom_},
                     {"contacts", contacts}, {"contact_examples", contact_examples_}, {"estops", estops},
                     {"order_mismatches", mismatches}, {"replans", replans_}, {"obstacles", obs}, {"d_detect", d_detect_},
-                    {"t_wait", t_wait_}, {"cross_edges", adg_->num_cross_edges()}, {"robots", robots},
+                    {"t_wait", t_wait_}, {"pass_through", pass_through_}, {"late_cancels", late_cancels_},
+                    {"detection", detection_}, {"phantoms_confirmed", phantoms_confirmed_}, {"held_cell_hits", held_cell_hits_},
+                    {"late_scans", late_scans_}, {"phantom_detections", phantom_detections_},
+                    {"cross_edges", adg_->num_cross_edges()}, {"robots", robots},
                     {"action_log", action_log_}};
         std::ofstream(out_dir_ + "/executive.json") << out.dump(1);
         RCLCPP_INFO(get_logger(), "%s: 다 끝난 시간 %.1f초, 재계획 %d번, 접촉 %ld, 순서 불일치 %zu",
@@ -789,7 +1063,13 @@ private:
     double t0_{0}, last_log_t_{-1.0}, last_tick_{0.0};
     int height_{0}, initial_plan_steps_{0}, replanning_{-1}, replans_{0}, plan_epoch_{0};
     long marker_tick_{0};
-    bool drop_{false}, started_{false}, finished_{false}, ok_{false};
+    bool drop_{false}, started_{false}, finished_{false}, ok_{false}, pass_through_{false};
+    int late_cancels_{0}, phantoms_confirmed_{0};
+    long held_cell_hits_{0}, late_scans_{0}, phantom_detections_{0};
+    std::deque<std::pair<Robot*, sensor_msgs::msg::LaserScan::ConstSharedPtr>> pending_scans_;
+    std::string detection_{"simulated"};
+    mapf_exec::LidarParams lidar_;
+    std::unique_ptr<mapf_exec::ObstacleConfirmer> confirmer_;
     std::map<int, Robot> robots_;
     std::vector<Obstacle> obstacles_;
     std::vector<mapf_exec::Violation> violations_;

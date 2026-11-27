@@ -57,12 +57,15 @@ def _setup(context):
     delay = float(LaunchConfiguration('spawn_delay').perform(context))
     actions += robot_actions(poses, delay)
     # 로봇마다 cell_follower(돌고-가기, 31.7) — 로봇별 최고 속도는 시나리오 JSON 값(31.13 D11)
+    robust_estop = LaunchConfiguration('robust_estop').perform(context).lower() == 'true'
     if LaunchConfiguration('followers').perform(context).lower() == 'true':
         for r in sc['robots']:
             actions.append(Node(package='mapf_ros', executable='cell_follower', namespace=r['name'], output='log',
                                 parameters=[{'use_sim_time': True, 'max_linear': float(r['max_linear']),
                                              'max_angular': float(r['max_angular']),
-                                             'estop_distance': float(LaunchConfiguration('estop_distance').perform(context))}]))
+                                             'estop_distance': float(LaunchConfiguration('estop_distance').perform(context)),
+                                             'estop_path_aware': robust_estop,
+                                             'estop_min_points': 2 if robust_estop else 1}]))
     names = [r['name'] for r in sc['robots']]
     actions += world_odom_tf(names)
     # RViz2 한 창(31.23): 로봇 모델·LiDAR·실행기 마커(상태). Gazebo 화면 없이 이것만 봐도 됨
@@ -92,6 +95,8 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='false', description='true면 RViz2 한 창(로봇·LiDAR·상태 표시)'),
         DeclareLaunchArgument('record', default_value='', description='폴더 이름을 주면 ros2 bag으로 녹화(다시 보기: replay.launch.py)'),
         DeclareLaunchArgument('estop_distance', default_value='0.25', description='비상 정지 거리(m). 0이면 끔 — 변이 검사용, 실험에 쓰지 말 것'),
+        DeclareLaunchArgument('robust_estop', default_value='false',
+                              description='비상 정지 v2(31.24 보충): 앞으로 갈 거리 안의 물체만 + 광선 2개 이상'),
         DeclareLaunchArgument('debug_no_flip', default_value='false', description='변이 검사용(틀린 월드). 실험에 쓰지 말 것'),
         OpaqueFunction(function=_setup),
     ])

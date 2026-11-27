@@ -14,7 +14,7 @@ source install/setup.bash
 | `mapf_gazebo` | TurtleBot3 N대 launch, 시나리오 JSON → 월드, 점검·시나리오 스크립트 | 7-0, 7-1 |
 | `mapf_exec` | ROS 모르는 C++: 칸↔미터, 계획 검사, 몸 검사, 돌고-가기 계산, 기록 분석기 `analyze_run` (이후 ADG·번호 다시 붙이기) | 7-2 |
 | `mapf_ros_msgs` | `ActionCommand`, `ActionStatus` | 7-2 |
-| `mapf_ros` | `cell_follower`(돌고-가기 노드), `mapf_executive`(저장된 계획 → 계획 검사 → ADG 실행·기록) | 7-2, 7-3 |
+| `mapf_ros` | `cell_follower`(돌고-가기 노드), `mapf_executive`(저장된 계획 → 계획 검사 → ADG 실행·기록, 장애물 발견·재계획) | 7-2~7-5 |
 
 ## 7-0 환경 점검
 
@@ -87,3 +87,24 @@ ros2 run mapf_gazebo add_obstacle corridor10_r6_s1 --spawn 2.0 --out my_ob.json
 ```
 상태 색: MOVE 파랑, WORK 검정(남은 초), YIELD 주황(양보 — 화살표가 기다리게 하는 로봇), HOLD 빨강(장애물 앞), STOP 보라(재계획 대기), DONE 초록, ESTOP 자홍.
 결과: `results/7_4/`(녹화 `bag/`은 git에 없음), 해석: docs/31 31.23.
+
+## 곧게 지나가기 · 비상 정지 v2 · LiDAR 발견 (31.24, 31.25) — 모두 스위치, 기본 꺼짐
+
+```
+# 한 번 실행: launch에 robust_estop:=true, run_7_4에 --pass-through --detection lidar
+ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1_hold robust_estop:=true rviz:=true record:=my_bag
+ros2 run mapf_gazebo run_7_4 --scenario corridor10_r6_s1_hold --method ours --pass-through --detection lidar \
+    --d-detect 1.0 --t-wait 10 --out-dir my75
+# 여러 번(run_batch가 launch·run_7_4 둘 다에 넘김)
+ros2 run mapf_gazebo run_batch --out-root my_batch --record --pass-through --robust-estop --detection lidar \
+    --extra="--t-wait 10" corridor10_r6_s1_hold:ours corridor10_r6_s1_hold:full
+# 결과 표, 재계획 입력을 2D 파이썬으로 다시 돌려 같은지
+ros2 run mapf_gazebo summarize_runs my_batch --csv my_batch.csv
+ros2 run mapf_gazebo check_replan_input my_batch/*/replan_*.json --both
+# 장애물 칸을 직접 골라 시나리오 만들기(열 행 순서!)
+ros2 run mapf_gazebo add_obstacle corridor10_r6_s1 --cell 5 1 --spawn 0.0 --suffix _hold --out my_hold.json
+```
+- `--pass-through`: 같은 방향으로 이어지는 칸은 칸 중심에서 서지 않음. `--robust-estop`(launch `robust_estop:=true`): 앞으로 갈 거리 안의 물체만, 광선 2개 이상.
+- `--detection lidar`: 로봇 LiDAR 점으로 장애물 칸을 찾음(다른 로봇 ± 0.2 m 점, 선반·벽 면 4 cm 안 점은 버림), 최근 `t_wait` 동안 90% 이상 보이면 확정.
+- 실행 폴더마다 `replan_<n>.json`(재계획 입력·출력)이 생긴다.
+- RViz: 노란 반투명 상자 = LiDAR가 찾았지만 시나리오에 없는 칸(오탐). 결과: `results/7_3pt`, `7_4pt`, `7_5`, 해석: docs/31 31.24·31.25.

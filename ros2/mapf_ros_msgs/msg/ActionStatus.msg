@@ -3,6 +3,7 @@ uint8 ACTIVE=0        # 받아서 하는 중
 uint8 DONE=1          # 끝남 (MOVE: 목표 칸 중심 도착, WAIT: 시간 다 됨)
 uint8 HELD=2          # 앞에 장애물이 보여 시작을 보류함 (7-4에서 씀)
 uint8 ESTOP=3         # 비상 정지 (정면 가까이에 무언가) — 실패로 센다(31.4)
+uint8 CANCELED=4      # CANCEL을 받아 줄 서 있던 동작 seq를 버림(시작 전이었음). 이미 시작했으면 이 답이 없다
 
 uint32 seq
 uint8 state

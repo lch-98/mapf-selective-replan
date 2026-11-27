@@ -48,6 +48,10 @@ public:
     std::vector<int> releasable() const;  // 지금 내줄 수 있는 동작들
     void release(int a);                  // 내줌(로봇이 하는 중)
     void done(int a);                     // 끝남
+    // 곧게 지나가기(31.24): 로봇이 지금 하는 이동 동작 a의 바로 다음 동작 b가 a와 같은 방향 이동(b.from == a.to)이고,
+    // 아직 안 내줬고, 로봇 사이 약속이 모두 끝났으면 b(미리 내줄 수 있음), 아니면 -1. 한 칸 앞까지만 본다.
+    int straight_next(int robot) const;
+    void unrelease(int a);                // 미리 내준 동작을 취소(내줌 → 아직). 끝난 동작은 안 됨
     bool released(int a) const { return state_[a] >= 1; }
     bool is_done(int a) const { return state_[a] == 2; }
     bool finished() const;

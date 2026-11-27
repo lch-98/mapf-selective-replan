@@ -99,6 +99,29 @@ void Adg::done(int a) {
     state_[a] = 2;
 }
 
+int Adg::straight_next(int robot) const {
+    const auto& list = robot_actions(robot);
+    for (std::size_t k = 0; k + 1 < list.size(); ++k) {
+        const int a = list[k];
+        if (state_[a] == 2) continue;
+        if (state_[a] != 1) return -1;  // 하는 중인 동작이 없음
+        const int b = list[k + 1];
+        const auto &A = actions_[a], &B = actions_[b];
+        if (state_[b] != 0 || A.kind != AdgAction::Kind::kMove || B.kind != AdgAction::Kind::kMove) return -1;
+        if (!(B.from == A.to) || B.to.x - B.from.x != A.to.x - A.from.x || B.to.y - B.from.y != A.to.y - A.from.y) return -1;
+        for (int p : cross_preds_[b]) {
+            if (state_[p] != 2) return -1;
+        }
+        return b;
+    }
+    return -1;
+}
+
+void Adg::unrelease(int a) {
+    if (state_.at(a) != 1) throw std::logic_error("Adg::unrelease: 내준(하는 중) 동작만 취소할 수 있음");
+    state_[a] = 0;
+}
+
 bool Adg::finished() const {
     for (int s : state_) {
         if (s != 2) return false;

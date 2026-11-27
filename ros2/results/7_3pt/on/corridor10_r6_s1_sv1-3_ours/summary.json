@@ -1,0 +1,193 @@
+{
+ "scenario": "corridor10_r6_s1_sv1-3",
+ "method": "ours",
+ "drop_cross_edges": false,
+ "checks": {
+  "모든 동작 완료": true,
+  "계획 검사 (가) 통과": true,
+  "몸 겹침 0 (기록)": true,
+  "접촉 0 (Gazebo 센서)": true,
+  "칸 이탈 0": true,
+  "선반/벽 겹침 0": true,
+  "비상 정지 0": true,
+  "칸 사용 순서 = 계획": true,
+  "늦은 취소 0": true
+ },
+ "obstacles": [],
+ "state_time_s": {
+  "robot_1": {
+   "DONE": 19.200000000000003,
+   "MOVE": 24.15,
+   "WORK": 6.450000000000003
+  },
+  "robot_2": {
+   "DONE": 13.900000000000006,
+   "MOVE": 29.9,
+   "WORK": 6.0
+  },
+  "robot_3": {
+   "DONE": 21.35,
+   "MOVE": 16.1,
+   "WORK": 12.350000000000001
+  },
+  "robot_4": {
+   "DONE": 0.05000000000000426,
+   "MOVE": 31.10000000000001,
+   "WORK": 11.199999999999996,
+   "YIELD": 7.449999999999996
+  },
+  "robot_5": {
+   "DONE": 30.900000000000006,
+   "MOVE": 7.049999999999999,
+   "WORK": 11.85
+  },
+  "robot_6": {
+   "DONE": 35.85,
+   "MOVE": 4.0,
+   "WORK": 9.950000000000001
+  }
+ },
+ "all_ok": true,
+ "body_overlap_samples": 0,
+ "min_body_gap_m": 0.242,
+ "escape_samples": 0,
+ "shelf_overlap_samples": 0,
+ "analysis": {
+  "robots": {
+   "robot_1": {
+    "samples": 997,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0047,
+    "max_overshoot_m": 0.0116,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_2": {
+    "samples": 997,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0057,
+    "max_overshoot_m": 0.0075,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_3": {
+    "samples": 997,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0,
+    "max_overshoot_m": 0.0101,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_4": {
+    "samples": 997,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.005,
+    "max_overshoot_m": 0.0138,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_5": {
+    "samples": 997,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0,
+    "max_overshoot_m": 0.0053,
+    "shelf_or_wall_overlap_samples": 0
+   },
+   "robot_6": {
+    "samples": 997,
+    "escape_samples": 0,
+    "max_escape_m": 0.0,
+    "max_cross_m": 0.0,
+    "max_overshoot_m": 0.0,
+    "shelf_or_wall_overlap_samples": 0
+   }
+  },
+  "pairs": {
+   "robot_1|robot_2": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 0.8564
+   },
+   "robot_1|robot_3": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.8216
+   },
+   "robot_1|robot_4": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 0.242
+   },
+   "robot_1|robot_5": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.6252
+   },
+   "robot_1|robot_6": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.5126
+   },
+   "robot_2|robot_3": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.0701
+   },
+   "robot_2|robot_4": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.2695
+   },
+   "robot_2|robot_5": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 2.0351
+   },
+   "robot_2|robot_6": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 0.7399
+   },
+   "robot_3|robot_4": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.862
+   },
+   "robot_3|robot_5": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 0.8702
+   },
+   "robot_3|robot_6": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.8798
+   },
+   "robot_4|robot_5": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 0.81
+   },
+   "robot_4|robot_6": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 1.861
+   },
+   "robot_5|robot_6": {
+    "checked": 997,
+    "overlap_samples": 0,
+    "min_distance_m": 4.0176
+   }
+  }
+ },
+ "makespan_s": 49.800000000000004,
+ "plan_makespan_steps": 13,
+ "cross_edges": 16,
+ "actions": 39,
+ "pass_through": true,
+ "moves": 33,
+ "passed_moves": 21,
+ "cancels": 0,
+ "sum_finish_s": 177.85000000000002
+}
