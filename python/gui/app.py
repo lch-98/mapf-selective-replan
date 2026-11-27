@@ -73,6 +73,11 @@ def _cell_at(path: list, t: int) -> tuple:
     return (cell.x, cell.y)
 
 
+
+# 한글 글꼴 후보(앞에서부터 있는 것을 씀): Windows = 맑은 고딕, Ubuntu = 나눔고딕/나눔바른고딕/Noto Sans CJK.
+# 맑은 고딕만 적으면 Ubuntu에서 한글이 깨진다(2026-11-27 사용자 확인).
+KOREAN_FONTS = "malgungothic,nanumgothic,nanumbarungothic,notosanscjkkr"
+
 class ReplanSideResult:
     """한쪽 패널(full_replan 또는 replan)의 최신 결과를 담는다."""
 
@@ -105,9 +110,9 @@ class App:
         self.screen = pygame.display.set_mode(self.layout.window_size())
         # Consolas는 한글 글리프가 없어서 한글 텍스트가 깨진다(네모/물음표로
         # 표시됨) — 맑은 고딕(malgungothic, Windows 기본 한글 폰트)으로 교체.
-        self.font = pygame.font.SysFont("malgungothic", 15)
-        self.header_font = pygame.font.SysFont("malgungothic", 18, bold=True)
-        self.badge_font = pygame.font.SysFont("malgungothic", 11, bold=True)
+        self.font = pygame.font.SysFont(KOREAN_FONTS, 15)
+        self.header_font = pygame.font.SysFont(KOREAN_FONTS, 18, bold=True)
+        self.badge_font = pygame.font.SysFont(KOREAN_FONTS, 11, bold=True)
         self.pygame_clock = pygame.time.Clock()
 
         self.message = ""
