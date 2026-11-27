@@ -3,7 +3,11 @@
     # 터미널 1: RViz2 + 로봇 모델(시나리오에서 로봇 이름을 읽음)
     ros2 launch mapf_gazebo replay.launch.py scenario:=corridor10_r6_s1_ob1
     # 터미널 2: 녹화 재생 — 이 터미널에서 스페이스 = 멈춤/계속, → = 한 메시지씩 (멈춘 상태에서)
-    ros2 bag play <녹화 폴더> --clock --rate 1.0
+    ros2 bag play <녹화 폴더> --rate 1.0
+
+--clock은 붙이지 않는다: 녹화 안에 Gazebo 시뮬레이터 시계(/clock)가 이미 있다. --clock을 붙이면 재생기가 녹화 때의 컴퓨터 시각으로
+두 번째 /clock을 내보내 시계가 0초대와 17억 초대를 오가고(8초에 284번 거꾸로 감, 2026-11-27 측정), RViz가 TF를 계속 지워 로봇이 번쩍인다.
+Gazebo 화면은 다시 볼 수 없다(Gazebo는 녹화를 재생하는 도구가 아니라 물리 시뮬레이터) — 실행할 때 scenario.launch.py gui:=true로 본다.
 
 play:=<녹화 폴더>를 주면 터미널 1에서 재생까지 한다(이때는 키보드로 멈출 수 없음).
 """
@@ -36,7 +40,7 @@ def _setup(context):
                             parameters=[{'use_sim_time': True}]))
     bag = LaunchConfiguration('play').perform(context)
     if bag:
-        actions.append(ExecuteProcess(cmd=['ros2', 'bag', 'play', bag, '--clock', '--rate',
+        actions.append(ExecuteProcess(cmd=['ros2', 'bag', 'play', bag, '--rate',
                                            LaunchConfiguration('rate').perform(context)], output='screen'))
     return actions
 

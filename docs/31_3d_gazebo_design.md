@@ -912,7 +912,7 @@ ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1_ob1 rviz:=
 ros2 run mapf_gazebo run_7_4 --scenario corridor10_r6_s1_ob1 --method ours --out-dir my74            # 다른 터미널
 # 다시 보기(Gazebo 필요 없음): 터미널 1에 RViz, 터미널 2에서 재생(스페이스 = 멈춤/계속)
 ros2 launch mapf_gazebo replay.launch.py scenario:=corridor10_r6_s1_ob1
-ros2 bag play ros2/results/7_4/corridor10_r6_s1_ob1_ours/bag --clock
+ros2 bag play ros2/results/7_4/corridor10_r6_s1_ob1_ours/bag   # --clock 붙이지 않음(31.23 보충)
 ```
 
 | RViz에 보이는 것 | 뜻 |
@@ -974,3 +974,13 @@ ros2 bag play ros2/results/7_4/corridor10_r6_s1_ob1_ours/bag --clock
 - **HOLD 상태는 이번 실행에서 한 번도 안 나옴**(발견이 생성과 동시라 로봇이 장애물 칸 바로 앞까지 갈 일이 없었음). 장애물을 늦게/멀리 두는 시나리오로 확인 필요.
 - 7-5 LiDAR 발견, 7-6 본 실험(시드 여러 개, 장애물이 여러 로봇에 걸리는 장면, `T_wait`·`d_detect` 바꾸기 — `run_batch --extra "--t-wait 0"`).
 - 위 해석 3(끝나는 시간)을 논문에서 어떻게 다룰지 — 사용자와 26장 차별점 함께 정하기.
+
+### 31.23 보충 — 다시 보기에서 로봇이 번쩍임, 확대가 안 됨 (2026-11-27 사용자 확인)
+
+- **번쩍임**: 처음에 `ros2 bag play … --clock`으로 안내했는데, 녹화 안에 이미 Gazebo 시뮬레이터 시계(`/clock`)가 있어서 재생기가 녹화 때 컴퓨터 시각으로
+  두 번째 `/clock`을 또 냈다 → 시계가 0초대와 17억 초대를 오감(화면 없이 같은 조건으로 재 보니 8초에 284번 거꾸로 감) → RViz가 TF를 계속 지워 로봇이 사라졌다 나타남.
+  **`--clock` 없이 재생하면 0번**. 안내와 `replay.launch.py play:=`를 고침.
+- **확대·축소가 안 됨**: 만든 RViz 설정에 마우스 조작 도구(Interact, Move Camera)가 없었다 → 넣음. 휠 = 확대·축소, 가운데 버튼 끌기(또는 Shift + 왼쪽 끌기) = 옮기기,
+  왼쪽 끌기 = 돌리기. Views 패널(배율·중심을 숫자로, Zero = 처음 시점), Time 패널(지금 시각 — 이상한 장면의 시각을 알려 줄 때)도 넣음.
+- **TF 연결 자체는 맞았다**: 녹화 재생 중 `world → robot_1/base_footprint` = (3.75, 0.25) m = 9행 7열 중심.
+- 다시 보기에서 Gazebo 화면(`gui`)은 볼 수 없다 — Gazebo는 녹화를 재생하지 않는다. 실행할 때 `scenario.launch.py gui:=true`로 본다.

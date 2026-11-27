@@ -79,7 +79,7 @@ ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1_ob1 rviz:=
 ros2 run mapf_gazebo run_7_4 --scenario corridor10_r6_s1_ob1 --method ours --out-dir my74   # full = 전체 재계획
 # 다시 보기(Gazebo 없이): RViz + 재생(재생 터미널에서 스페이스 = 멈춤/계속)
 ros2 launch mapf_gazebo replay.launch.py scenario:=corridor10_r6_s1_ob1
-ros2 bag play my_bag --clock
+ros2 bag play my_bag   # --clock 붙이지 않음
 # 여러 실행을 차례로(Gazebo를 실행마다 새로 띄우고 끔)
 ros2 run mapf_gazebo run_batch --out-root my_batch --record corridor10_r6_s1_ob1:ours corridor10_r6_s1_ob1:full
 # 시나리오에 장애물 넣기

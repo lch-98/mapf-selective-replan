@@ -2,6 +2,8 @@
 
 보이는 것: 바닥 격자(0.5 m 칸), 실행기 마커(/mapf/markers: 선반·장애물·가진 칸·남은 경로·상태 원판과 글자·양보 화살표·맨 위 정보 줄),
 로봇마다 3D 모델(robot_state_publisher의 robot_description, TF 접두어 robot_i)과 LiDAR 점.
+마우스(Interact·Move Camera 도구): 휠 = 확대·축소, 가운데 버튼 끌기(또는 Shift + 왼쪽 끌기) = 옮기기, 왼쪽 끌기 = 돌리기.
+Views 패널: 배율(Scale)·중심(X, Y)을 숫자로, "Zero"로 처음 시점. Time 패널: 지금 시뮬레이터 시각.
 시점: 위에서 내려다봄(위 = +y = 2D 그림의 0행 쪽, 오른쪽 = +x). 고정 프레임 world(Gazebo odom = 월드 좌표라 world → robot_i/odom은 그대로).
 """
 
@@ -48,8 +50,22 @@ def make_rviz(names, width_m, height_m):
   - Class: rviz_common/Displays
     Name: Displays
     Help Height: 0
+  - Class: rviz_common/Views
+    Name: Views
+    Expanded:
+      - /Current View1
+    Splitter Ratio: 0.5
+  - Class: rviz_common/Time
+    Name: Time
+    Experimental: false
 Visualization Manager:
   Class: ""
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
   Displays:
     - Class: rviz_default_plugins/Grid
       Name: 칸(0.5 m)
