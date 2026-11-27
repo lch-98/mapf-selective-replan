@@ -5,6 +5,7 @@
 - scenario: 파일 경로, 또는 패키지 scenarios/ 안의 이름(.json 생략 가능)
 - 월드: grid_to_world.world_xml로 임시 폴더에 만들어 띄운다(손으로 고친 .world 없음 → 2D와 3D 지도가 항상 같음)
 - 로봇: robot_{id+1}을 출발 칸 중심(grid.cell_center)에, 처음 이동 방향(start_yaw_deg)을 보게
+- rviz:=true: RViz2 한 창(31.23), record:=<폴더>: 녹화(다시 보기는 replay.launch.py)
 - followers:=true(기본): 로봇마다 cell_follower(돌고-가기 노드, 7-2)를 같이 띄운다
 - debug_no_flip:=true 는 변이 검사용: 세로를 안 뒤집은 "틀린" 월드를 띄워 check_7_1이 잡는지 본다(기본 false)
 """
@@ -22,7 +23,10 @@ from launch_ros.actions import Node
 from mapf_gazebo import scenario_io
 from mapf_gazebo.grid import cell_center
 from mapf_gazebo.grid_to_world import world_xml
-from mapf_gazebo.spawn import robot_actions
+from launch.actions import ExecuteProcess
+
+from mapf_gazebo.rviz_config import make_rviz
+from mapf_gazebo.spawn import robot_actions, world_odom_tf
 
 
 def _setup(context):
@@ -59,6 +63,22 @@ def _setup(context):
                                 parameters=[{'use_sim_time': True, 'max_linear': float(r['max_linear']),
                                              'max_angular': float(r['max_angular']),
                                              'estop_distance': float(LaunchConfiguration('estop_distance').perform(context))}]))
+    names = [r['name'] for r in sc['robots']]
+    actions += world_odom_tf(names)
+    # RViz2 한 창(31.23): 로봇 모델·LiDAR·실행기 마커(상태). Gazebo 화면 없이 이것만 봐도 됨
+    if LaunchConfiguration('rviz').perform(context).lower() == 'true':
+        rviz_path = os.path.join(os.path.dirname(world_path), 'mapf.rviz')
+        with open(rviz_path, 'w') as f:
+            f.write(make_rviz(names, len(sc['map'][0]) * cell, h * cell))
+        actions.append(Node(package='rviz2', executable='rviz2', arguments=['-d', rviz_path], output='log',
+                            parameters=[{'use_sim_time': True}]))
+    # 녹화(다시 보기용): record:=<폴더>
+    rec = LaunchConfiguration('record').perform(context)
+    if rec:
+        topics = ['/clock', '/tf', '/tf_static', '/mapf/markers']
+        for n in names:
+            topics += [f'/{n}/scan', f'/{n}/joint_states', f'/{n}/odom']
+        actions.append(ExecuteProcess(cmd=['ros2', 'bag', 'record', '-o', rec] + topics, output='log'))
     return actions
 
 
@@ -69,6 +89,8 @@ def generate_launch_description():
         DeclareLaunchArgument('spawn_delay', default_value='0.5'),
         DeclareLaunchArgument('followers', default_value='true', description='로봇마다 cell_follower 노드(7-2)'),
         DeclareLaunchArgument('clock_hz', default_value='100.0', description='Gazebo /clock 빈도(Hz)'),
+        DeclareLaunchArgument('rviz', default_value='false', description='true면 RViz2 한 창(로봇·LiDAR·상태 표시)'),
+        DeclareLaunchArgument('record', default_value='', description='폴더 이름을 주면 ros2 bag으로 녹화(다시 보기: replay.launch.py)'),
         DeclareLaunchArgument('estop_distance', default_value='0.25', description='비상 정지 거리(m). 0이면 끔 — 변이 검사용, 실험에 쓰지 말 것'),
         DeclareLaunchArgument('debug_no_flip', default_value='false', description='변이 검사용(틀린 월드). 실험에 쓰지 말 것'),
         OpaqueFunction(function=_setup),

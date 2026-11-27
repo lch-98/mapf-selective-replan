@@ -1,11 +1,12 @@
 #include "mapf_exec/adg.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace mapf_exec {
 
 Adg::Adg(const std::map<int, std::vector<GridCell>>& paths, const std::map<int, int>& service_steps,
-         bool cross_edges) {
+         bool cross_edges, const std::map<int, int>& service_start) {
     for (const auto& [robot, path] : paths) {
         auto& list = by_robot_[robot];
         if (path.empty()) continue;
@@ -23,20 +24,25 @@ Adg::Adg(const std::map<int, std::vector<GridCell>>& paths, const std::map<int, 
                 actions_.push_back(a);
             }
         }
-        // 작업 동작: 경로 끝 목적지에 처음 머물기 시작한 번호부터
+        // 작업 동작: service_start가 있으면 그 번호, 없으면 경로 끝 목적지에 처음 머물기 시작한 번호
         auto it = service_steps.find(robot);
         if (it != service_steps.end() && it->second > 0) {
             int arrive = static_cast<int>(path.size()) - 1;
             while (arrive > 0 && path[arrive - 1] == path.back()) --arrive;
+            auto st = service_start.find(robot);
+            if (st != service_start.end()) arrive = st->second;
             AdgAction a;
             a.robot = robot;
-            a.index = static_cast<int>(list.size());
             a.kind = AdgAction::Kind::kService;
-            a.from = a.to = path.back();
+            a.from = a.to = path[std::min<std::size_t>(static_cast<std::size_t>(arrive), path.size() - 1)];
             a.plan_t = arrive;
             a.service_steps = it->second;
-            list.push_back(static_cast<int>(actions_.size()));
+            // 그 번호 전에 시작하는 이동들 다음 자리에 끼워 넣고 번호(index)를 다시 매김
+            std::size_t pos = 0;
+            while (pos < list.size() && actions_[list[pos]].plan_t < arrive) ++pos;
+            list.insert(list.begin() + static_cast<long>(pos), static_cast<int>(actions_.size()));
             actions_.push_back(a);
+            for (std::size_t k = 0; k < list.size(); ++k) actions_[list[k]].index = static_cast<int>(k);
         }
     }
 

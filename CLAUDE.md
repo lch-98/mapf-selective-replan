@@ -51,10 +51,15 @@ python3 python/smoke_test.py
 ```
 (Ubuntu에서는 실행 파일 경로에 `Release/`가 없다. 파이썬 모듈은 `build/bindings/mapf_py*.so` — `python/_pathsetup.py`가 찾는다.)
 3D(Ubuntu 전용, `ros2/README.md`): `cd ros2 && source /opt/ros/humble/setup.bash && colcon build --symlink-install && source install/setup.bash`,
-`ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1`(화면은 `gui:=true`, 시나리오 JSON 형식은 31.19). **AI가 Gazebo를 띄우고 끌 때**: 먼저 `ps`로 사용자가 띄워 둔 Gazebo가 있는지 확인한다(있으면 같은 월드로 착각한 점검이 돌고, 새 gzserver는 죽는다 —
+`ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1_ob1 rviz:=true`(RViz2 한 창, 녹화 `record:=폴더`, 시나리오 JSON 형식은 31.19), 여러 실행은 `ros2 run mapf_gazebo run_batch`. **AI가 Gazebo를 띄우고 끌 때**: 먼저 `ps`로 사용자가 띄워 둔 Gazebo가 있는지 확인한다(있으면 같은 월드로 착각한 점검이 돌고, 새 gzserver는 죽는다 —
 2026-11-26 실제로 겪음). 끌 때는 **자기가 띄운 launch의 PID로만** `kill -INT <PID>` 한다(띄울 때 `bash -c 'echo $$ > pidfile; exec ros2 launch ...'`로 PID를 적어 둠, 확인은 `pgrep -xa gzserver`). `pkill -f "ros2 launch mapf_gazebo"`는 사용자의 Gazebo까지 끄고,
-패턴이 든 셸 자신도 끈다.
+패턴이 든 셸 자신도 끈다. 셸에서 `&`로 띄운 launch는 SIGINT를 무시하므로 여러 실행은 `run_batch`(새 프로세스 그룹)로 한다.
 
 ## 지금 위치 (2026-11-27)
-일정 1~6 완료(6번 나머지 6″은 9번 직전). 다음은 **일정 7: ROS2 + Gazebo 3D** — `docs/31_3d_gazebo_design.md`(2026-11-25): 실행은 ADG,
-재계획은 "지금 모습 = 새 0번" + 약속을 지키는 번호 다시 붙이기(31.6), 기본 6대. 31.13 확정(2026-11-26, 바닥 크기만 미정), 안전은 세 겹(31.4). **7-0~7-3 완료(31.18·31.20·31.21·31.22), 다음은 7-4**(작업 순서 7-0~7-6과 단계별 "끝났다" 기준 = **31.12**).
+일정 1~6 완료(6번 나머지 6″은 9번 직전). **일정 7(ROS2 + Gazebo 3D)** 진행 중 — 설계·결과는 모두 `docs/31_3d_gazebo_design.md`.
+- 완료: 7-0 환경(31.18), 7-1 월드(31.20), 7-2 한 대 주행(31.21), 7-3 ADG 여러 대(31.22), **RViz2 한 창 + 7-4 장애물 재계획(31.23)**.
+- 다음: RViz 화면 사용자 확인 → **7-5 LiDAR 발견 → 7-6 본 실험**(작업 순서·끝 기준 = 31.12). 이어받기 프롬프트: `docs/NEXT_SESSION_PROMPT.md`.
+- **진행 방식(사용자 결정 2026-11-27)**: 남은 7번 단계는 한꺼번에 구현한 뒤 결과를 모아 보고하고, 사용자가 다시 보기(RViz)로 따라가며 이상한 장면을 짚으면 추가 검증한다.
+  단계마다 테스트·변이 검사·31장 기록은 그대로. 화면은 **RViz2 한 창**(Gazebo는 화면 없이).
+- 핵심 설계(31장): 실행은 ADG, 재계획은 "지금 모습 = 새 0번" + 약속을 지키는 번호 다시 붙이기(31.6), 안전은 세 겹(31.4), 실행 중 `plan()`은 안 부름(저장된 `initial_plan`).
+- 7-4에서 나온 주의할 결과: 좁은 통로에서 우리 방법은 바뀐 로봇이 적지만 다 끝난 시간이 더 길었다(31.23 해석 3) — 논문에서 다룰 방법을 사용자와 정해야 함.

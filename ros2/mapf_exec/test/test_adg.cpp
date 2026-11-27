@@ -111,3 +111,15 @@ TEST(Adg, MisuseThrows) {
     g.release(c0);
     EXPECT_THROW(g.release(c0), std::logic_error);
 }
+
+TEST(Adg, ServiceInTheMiddleWhenStartGiven) {
+    // 재계획 뒤 "작업 2스텝 → 비켜 주는 이동": 4행 7열에서 번호 0~2 작업, 번호 2에 4행 8열로
+    Adg g({{0, {{7, 4}, {7, 4}, {7, 4}, {8, 4}}}}, {{0, 2}}, true, {{0, 0}});
+    const auto& r = g.robot_actions(0);
+    ASSERT_EQ(r.size(), 2u);
+    EXPECT_EQ(g.actions()[r[0]].kind, Kind::kService);
+    EXPECT_EQ(g.actions()[r[0]].index, 0);
+    EXPECT_EQ(g.actions()[r[1]].kind, Kind::kMove);
+    EXPECT_EQ(g.actions()[r[1]].index, 1);
+    EXPECT_EQ(g.actions()[r[1]].to, (GridCell{8, 4}));
+}

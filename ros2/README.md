@@ -70,3 +70,20 @@ ros2 run mapf_gazebo plot_run --scenario corridor10_r6_s1 --log my73/run.csv --o
 ros2 run mapf_gazebo run_7_3 --scenario corridor10_r6_s1 --out-dir my73_mut --drop-cross-edges
 ```
 한 번 실행하면 로봇이 목적지에 가 있으므로, 다시 돌리려면 터미널 1을 껐다 켠다. 결과: `results/7_3/`, 해석: docs/31 31.22.
+
+## RViz2 한 창 + 7-4 장애물 재계획
+
+```
+# 실행 + RViz2 화면 + 녹화
+ros2 launch mapf_gazebo scenario.launch.py scenario:=corridor10_r6_s1_ob1 rviz:=true record:=my_bag
+ros2 run mapf_gazebo run_7_4 --scenario corridor10_r6_s1_ob1 --method ours --out-dir my74   # full = 전체 재계획
+# 다시 보기(Gazebo 없이): RViz + 재생(재생 터미널에서 스페이스 = 멈춤/계속)
+ros2 launch mapf_gazebo replay.launch.py scenario:=corridor10_r6_s1_ob1
+ros2 bag play my_bag --clock
+# 여러 실행을 차례로(Gazebo를 실행마다 새로 띄우고 끔)
+ros2 run mapf_gazebo run_batch --out-root my_batch --record corridor10_r6_s1_ob1:ours corridor10_r6_s1_ob1:full
+# 시나리오에 장애물 넣기
+ros2 run mapf_gazebo add_obstacle corridor10_r6_s1 --spawn 2.0 --out my_ob.json
+```
+상태 색: MOVE 파랑, WORK 검정(남은 초), YIELD 주황(양보 — 화살표가 기다리게 하는 로봇), HOLD 빨강(장애물 앞), STOP 보라(재계획 대기), DONE 초록, ESTOP 자홍.
+결과: `results/7_4/`(녹화 `bag/`은 git에 없음), 해석: docs/31 31.23.

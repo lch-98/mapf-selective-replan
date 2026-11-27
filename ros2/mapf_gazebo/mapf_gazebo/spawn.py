@@ -63,6 +63,21 @@ def robot_actions(robots, spawn_delay=0.5):
     return actions
 
 
+def robot_description():
+    """TurtleBot3 URDF(xacro 처리, namespace 비움) — 다시 보기(replay)에서도 같은 모델을 쓰려고 따로 둠."""
+    model = os.environ.get('TURTLEBOT3_MODEL', 'burger')
+    tb3_desc = get_package_share_directory('turtlebot3_description')
+    return xacro.process_file(os.path.join(tb3_desc, 'urdf', f'turtlebot3_{model}.urdf'), mappings={'namespace': ''}).toxml()
+
+
+def world_odom_tf(names):
+    """world → robot_i/odom 고정 TF(항등). Gazebo의 odom은 월드 좌표 그대로라서(31.18). RViz가 world 기준으로 그리려면 필요.
+    실제 로봇(8번)에서는 위치 추정 결과로 바뀌어야 한다."""
+    return [Node(package='tf2_ros', executable='static_transform_publisher', output='log',
+                 name=f'world_to_{n}_odom', arguments=['--frame-id', 'world', '--child-frame-id', f'{n}/odom'],
+                 parameters=[{'use_sim_time': True}]) for n in names]
+
+
 def line_poses(n, spacing):
     """7-0용 한 줄 배치: robot_i를 x = (i-1)·spacing, y = 0, 방향 0."""
     return [(f'robot_{i}', (i - 1) * spacing, 0.0, 0.0) for i in range(1, n + 1)]

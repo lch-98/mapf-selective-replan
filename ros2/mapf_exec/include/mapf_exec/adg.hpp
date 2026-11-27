@@ -32,8 +32,10 @@ class Adg {
 public:
     // paths: 로봇 → 시간표(i번째 = 번호 i의 칸). service_steps: 로봇 → 경로 끝 목적지에서의 작업 스텝(없으면 0).
     // cross_edges=false는 변이 검사용(로봇 사이 화살표를 모두 뺌). 실험에 쓰지 말 것.
+    // service_start(선택): 로봇 → 작업을 시작하는 번호. 주면 작업 동작을 그 자리(그 번호 전의 이동들 다음)에 넣는다 —
+    // 재계획 뒤에는 "작업 → 비켜 주는 이동"처럼 작업이 경로 끝이 아닐 수 있다(7-4). 안 주면 경로 끝 목적지에서 시작.
     Adg(const std::map<int, std::vector<GridCell>>& paths, const std::map<int, int>& service_steps,
-        bool cross_edges = true);
+        bool cross_edges = true, const std::map<int, int>& service_start = {});
 
     const std::vector<AdgAction>& actions() const { return actions_; }
     // 동작 a로 들어오는 로봇 사이 화살표(앞 동작 번호들)

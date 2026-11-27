@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 install/
 log/
+ros2/results/**/bag/
