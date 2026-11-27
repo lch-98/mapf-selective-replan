@@ -1,0 +1,1062 @@
+{
+ "abort_reason": "",
+ "action_log": [
+  {
+   "done_s": 2.8999999999999995,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 0,
+   "plan_t": 0,
+   "pos_err_m": 0.00559634545157494,
+   "robot": "robot_5",
+   "to": [
+    6,
+    1
+   ]
+  },
+  {
+   "done_s": 3.1999999999999993,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 0,
+   "plan_t": 0,
+   "pos_err_m": 0.0035716066738537356,
+   "robot": "robot_3",
+   "to": [
+    9,
+    6
+   ]
+  },
+  {
+   "done_s": 3.1999999999999993,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 0,
+   "plan_t": 0,
+   "pos_err_m": 0.002040181007743205,
+   "robot": "robot_4",
+   "to": [
+    5,
+    7
+   ]
+  },
+  {
+   "done_s": 3.1999999999999993,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 0,
+   "plan_t": 0,
+   "pos_err_m": 0.005266026675253603,
+   "robot": "robot_1",
+   "to": [
+    7,
+    5
+   ]
+  },
+  {
+   "done_s": 3.4499999999999993,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 0,
+   "plan_t": 0,
+   "pos_err_m": 0.008835354089079537,
+   "robot": "robot_6",
+   "to": [
+    8,
+    1
+   ]
+  },
+  {
+   "done_s": 5.549999999999999,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 0,
+   "plan_t": 1,
+   "pos_err_m": 0.000698564049607458,
+   "robot": "robot_5",
+   "to": [
+    5,
+    1
+   ]
+  },
+  {
+   "done_s": 7.25,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 0,
+   "plan_t": 0,
+   "pos_err_m": 0.00420567439344903,
+   "robot": "robot_2",
+   "to": [
+    5,
+    6
+   ]
+  },
+  {
+   "done_s": 7.299999999999999,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 0,
+   "plan_t": 1,
+   "pos_err_m": 0.0037883559144114283,
+   "robot": "robot_1",
+   "to": [
+    6,
+    5
+   ]
+  },
+  {
+   "done_s": 7.299999999999999,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 0,
+   "plan_t": 1,
+   "pos_err_m": 0.003992266900475926,
+   "robot": "robot_3",
+   "to": [
+    9,
+    5
+   ]
+  },
+  {
+   "done_s": 7.299999999999999,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 0,
+   "plan_t": 1,
+   "pos_err_m": 0.00429228618318312,
+   "robot": "robot_4",
+   "to": [
+    5,
+    8
+   ]
+  },
+  {
+   "done_s": 7.549999999999999,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 0,
+   "plan_t": 1,
+   "pos_err_m": 0.004223121338394659,
+   "robot": "robot_6",
+   "to": [
+    7,
+    1
+   ]
+  },
+  {
+   "done_s": 10.45,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 0,
+   "pos_err_m": 0.0010690731383810423,
+   "robot": "robot_5",
+   "to": [
+    4,
+    1
+   ]
+  },
+  {
+   "done_s": 10.799999999999999,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 0,
+   "pos_err_m": 0.011241161490302342,
+   "robot": "robot_1",
+   "to": [
+    5,
+    5
+   ]
+  },
+  {
+   "done_s": 11.950000000000001,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 0,
+   "pos_err_m": 0.00383246516491285,
+   "robot": "robot_6",
+   "to": [
+    6,
+    1
+   ]
+  },
+  {
+   "done_s": 12.950000000000001,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 0,
+   "pos_err_m": 0.011280265660269052,
+   "robot": "robot_3",
+   "to": [
+    8,
+    5
+   ]
+  },
+  {
+   "done_s": 13.1,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 1,
+   "pos_err_m": 0.004947142877854253,
+   "robot": "robot_5",
+   "to": [
+    3,
+    1
+   ]
+  },
+  {
+   "done_s": 13.700000000000001,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 1,
+   "pos_err_m": 0.0025389051984680507,
+   "robot": "robot_1",
+   "to": [
+    4,
+    5
+   ]
+  },
+  {
+   "done_s": 15.749999999999998,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 0,
+   "pos_err_m": 0.004041833655818315,
+   "robot": "robot_4",
+   "to": [
+    5,
+    7
+   ]
+  },
+  {
+   "done_s": 15.749999999999998,
+   "index": 2,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 2,
+   "pos_err_m": 0.008827909292774449,
+   "robot": "robot_5",
+   "to": [
+    2,
+    1
+   ]
+  },
+  {
+   "done_s": 16.65,
+   "index": 2,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 2,
+   "pos_err_m": 0.005399301144343829,
+   "robot": "robot_1",
+   "to": [
+    3,
+    5
+   ]
+  },
+  {
+   "done_s": 17.0,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 1,
+   "pos_err_m": 0.00470006065055302,
+   "robot": "robot_3",
+   "to": [
+    7,
+    5
+   ]
+  },
+  {
+   "done_s": 18.4,
+   "index": 3,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 3,
+   "pos_err_m": 0.00624852500178618,
+   "robot": "robot_5",
+   "to": [
+    1,
+    1
+   ]
+  },
+  {
+   "done_s": 19.6,
+   "index": 3,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 3,
+   "pos_err_m": 0.0024799860138450254,
+   "robot": "robot_1",
+   "to": [
+    2,
+    5
+   ]
+  },
+  {
+   "done_s": 20.6,
+   "index": 0,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 1,
+   "pos_err_m": 0.004625474359096664,
+   "robot": "robot_2",
+   "to": [
+    5,
+    5
+   ]
+  },
+  {
+   "done_s": 22.25,
+   "index": 4,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 4,
+   "pos_err_m": 0.004066342717541481,
+   "robot": "robot_5",
+   "to": [
+    0,
+    1
+   ]
+  },
+  {
+   "done_s": 22.549999999999997,
+   "index": 4,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 4,
+   "pos_err_m": 0.005340638078190027,
+   "robot": "robot_1",
+   "to": [
+    1,
+    5
+   ]
+  },
+  {
+   "done_s": 24.0,
+   "index": 2,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 3,
+   "pos_err_m": 0.0031600073655639648,
+   "robot": "robot_3",
+   "to": [
+    8,
+    5
+   ]
+  },
+  {
+   "done_s": 25.0,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 1,
+   "pos_err_m": 0.0036007057095252307,
+   "robot": "robot_4",
+   "to": [
+    5,
+    6
+   ]
+  },
+  {
+   "done_s": 25.15,
+   "index": 1,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 2,
+   "pos_err_m": 0.011745341790471748,
+   "robot": "robot_2",
+   "to": [
+    6,
+    5
+   ]
+  },
+  {
+   "done_s": 26.65,
+   "index": 5,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 5,
+   "pos_err_m": 0.0037215002971165553,
+   "robot": "robot_1",
+   "to": [
+    0,
+    5
+   ]
+  },
+  {
+   "done_s": 28.1,
+   "index": 3,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 4,
+   "pos_err_m": 0.004047010861597155,
+   "robot": "robot_3",
+   "to": [
+    9,
+    5
+   ]
+  },
+  {
+   "done_s": 28.200000000000003,
+   "index": 5,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 5,
+   "pos_err_m": 0.004512804041827464,
+   "robot": "robot_5",
+   "to": [
+    0,
+    0
+   ]
+  },
+  {
+   "done_s": 28.450000000000003,
+   "index": 2,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 3,
+   "pos_err_m": 0.005137835662275057,
+   "robot": "robot_2",
+   "to": [
+    7,
+    5
+   ]
+  },
+  {
+   "done_s": 29.550000000000004,
+   "index": 2,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 2,
+   "pos_err_m": 0.004232705169665707,
+   "robot": "robot_4",
+   "to": [
+    5,
+    5
+   ]
+  },
+  {
+   "done_s": 31.75,
+   "index": 6,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 6,
+   "pos_err_m": 0.01032732543379806,
+   "robot": "robot_1",
+   "to": [
+    0,
+    6
+   ]
+  },
+  {
+   "done_s": 32.2,
+   "index": 3,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 4,
+   "pos_err_m": 0.003640549571496733,
+   "robot": "robot_2",
+   "to": [
+    8,
+    5
+   ]
+  },
+  {
+   "done_s": 34.6,
+   "index": 4,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 5,
+   "pos_err_m": 0.0032375961759376257,
+   "robot": "robot_3",
+   "to": [
+    9,
+    4
+   ]
+  },
+  {
+   "done_s": 34.65,
+   "index": 7,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 7,
+   "pos_err_m": 0.0016254843874198013,
+   "robot": "robot_1",
+   "to": [
+    0,
+    7
+   ]
+  },
+  {
+   "done_s": 34.85,
+   "index": 3,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 3,
+   "pos_err_m": 0.0020207431282034324,
+   "robot": "robot_4",
+   "to": [
+    4,
+    5
+   ]
+  },
+  {
+   "done_s": 37.800000000000004,
+   "index": 4,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 4,
+   "pos_err_m": 0.0041326917843700645,
+   "robot": "robot_4",
+   "to": [
+    3,
+    5
+   ]
+  },
+  {
+   "done_s": 38.65,
+   "index": 4,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 5,
+   "pos_err_m": 0.0036605416041436507,
+   "robot": "robot_2",
+   "to": [
+    9,
+    5
+   ]
+  },
+  {
+   "done_s": 38.75,
+   "index": 8,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 8,
+   "pos_err_m": 0.004391937819316767,
+   "robot": "robot_1",
+   "to": [
+    0,
+    8
+   ]
+  },
+  {
+   "done_s": 40.75,
+   "index": 5,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 5,
+   "pos_err_m": 0.006971346528817016,
+   "robot": "robot_4",
+   "to": [
+    2,
+    5
+   ]
+  },
+  {
+   "done_s": 43.1,
+   "index": 5,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 6,
+   "pos_err_m": 0.005189885006206022,
+   "robot": "robot_2",
+   "to": [
+    9,
+    6
+   ]
+  },
+  {
+   "done_s": 44.85,
+   "index": 6,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 6,
+   "pos_err_m": 0.0044142833542238575,
+   "robot": "robot_4",
+   "to": [
+    1,
+    5
+   ]
+  },
+  {
+   "done_s": 46.85,
+   "index": 6,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 7,
+   "pos_err_m": 0.0033543972781993506,
+   "robot": "robot_2",
+   "to": [
+    9,
+    7
+   ]
+  },
+  {
+   "done_s": 50.15,
+   "index": 7,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 7,
+   "pos_err_m": 0.005269674502237707,
+   "robot": "robot_4",
+   "to": [
+    1,
+    4
+   ]
+  },
+  {
+   "done_s": 51.300000000000004,
+   "index": 5,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 6,
+   "pos_err_m": 0.003328765793132548,
+   "robot": "robot_3",
+   "to": [
+    9,
+    5
+   ]
+  },
+  {
+   "done_s": 53.050000000000004,
+   "index": 8,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 8,
+   "pos_err_m": 0.001719450903266918,
+   "robot": "robot_4",
+   "to": [
+    1,
+    3
+   ]
+  },
+  {
+   "done_s": 56.050000000000004,
+   "index": 9,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 9,
+   "pos_err_m": 0.010162038419309941,
+   "robot": "robot_4",
+   "to": [
+    1,
+    2
+   ]
+  },
+  {
+   "done_s": 56.65,
+   "index": 6,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 7,
+   "pos_err_m": 0.0026283291972551714,
+   "robot": "robot_3",
+   "to": [
+    8,
+    5
+   ]
+  },
+  {
+   "done_s": 58.95,
+   "index": 10,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 10,
+   "pos_err_m": 0.0014609288437719182,
+   "robot": "robot_4",
+   "to": [
+    1,
+    1
+   ]
+  },
+  {
+   "done_s": 59.6,
+   "index": 7,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 8,
+   "pos_err_m": 0.004868048151479454,
+   "robot": "robot_3",
+   "to": [
+    7,
+    5
+   ]
+  },
+  {
+   "done_s": 62.550000000000004,
+   "index": 8,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 9,
+   "pos_err_m": 0.0077047681779482775,
+   "robot": "robot_3",
+   "to": [
+    6,
+    5
+   ]
+  },
+  {
+   "done_s": 63.050000000000004,
+   "index": 11,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 11,
+   "pos_err_m": 0.004424364121268993,
+   "robot": "robot_4",
+   "to": [
+    1,
+    0
+   ]
+  },
+  {
+   "done_s": 65.5,
+   "index": 9,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 10,
+   "pos_err_m": 0.010563923029020709,
+   "robot": "robot_3",
+   "to": [
+    5,
+    5
+   ]
+  },
+  {
+   "done_s": 68.39999999999999,
+   "index": 10,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 11,
+   "pos_err_m": 0.001864483152737679,
+   "robot": "robot_3",
+   "to": [
+    4,
+    5
+   ]
+  },
+  {
+   "done_s": 71.35,
+   "index": 11,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 12,
+   "pos_err_m": 0.0047250833981108695,
+   "robot": "robot_3",
+   "to": [
+    3,
+    5
+   ]
+  },
+  {
+   "done_s": 74.3,
+   "index": 12,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 13,
+   "pos_err_m": 0.0018057771588493529,
+   "robot": "robot_3",
+   "to": [
+    2,
+    5
+   ]
+  },
+  {
+   "done_s": 78.39999999999999,
+   "index": 13,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 14,
+   "pos_err_m": 0.004264531996636973,
+   "robot": "robot_3",
+   "to": [
+    1,
+    5
+   ]
+  },
+  {
+   "done_s": 83.75,
+   "index": 14,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 15,
+   "pos_err_m": 0.0009637006963480228,
+   "robot": "robot_3",
+   "to": [
+    1,
+    6
+   ]
+  },
+  {
+   "done_s": 86.69999999999999,
+   "index": 15,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 16,
+   "pos_err_m": 0.0030375593053776537,
+   "robot": "robot_3",
+   "to": [
+    1,
+    7
+   ]
+  },
+  {
+   "done_s": 89.64999999999999,
+   "index": 16,
+   "kind": "MOVE",
+   "passed_through": true,
+   "plan_epoch": 1,
+   "plan_t": 17,
+   "pos_err_m": 0.005887799434400932,
+   "robot": "robot_3",
+   "to": [
+    1,
+    8
+   ]
+  },
+  {
+   "done_s": 93.75,
+   "index": 17,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 18,
+   "pos_err_m": 0.004597735739973044,
+   "robot": "robot_3",
+   "to": [
+    1,
+    9
+   ]
+  },
+  {
+   "done_s": 100.25,
+   "index": 18,
+   "kind": "MOVE",
+   "passed_through": false,
+   "plan_epoch": 1,
+   "plan_t": 19,
+   "pos_err_m": 0.003159818705380235,
+   "robot": "robot_3",
+   "to": [
+    2,
+    9
+   ]
+  }
+ ],
+ "all_done": true,
+ "contact_examples": [],
+ "contacts": 0,
+ "cross_edges": 31,
+ "d_detect": 2.0,
+ "detection": "lidar",
+ "estops": 0,
+ "held_cell_hits": 0,
+ "late_cancels": 0,
+ "late_scans": 0,
+ "makespan_s": 100.3,
+ "method": "full",
+ "obstacles": [
+  {
+   "bins_seen": 16,
+   "bins_total": 16,
+   "cell": [
+    5,
+    9
+   ],
+   "changed_robots": [
+    "robot_2",
+    "robot_3",
+    "robot_4"
+   ],
+   "compute_ms": 0.528573,
+   "confirm_s": 5.299999999999999,
+   "detect_s": 2.231,
+   "detected_by": "robot_2",
+   "detection": "lidar",
+   "drops": 0,
+   "first_detect_s": 2.231,
+   "method": "full",
+   "new_plan_steps": 20,
+   "phantom": false,
+   "plan_check_violations": 0,
+   "replan_s": 7.6,
+   "sim_detect_s": 2.0,
+   "sim_detected_by": "robot_2",
+   "spawn_s": 2.0,
+   "success": true
+  }
+ ],
+ "order_mismatches": [],
+ "pass_through": true,
+ "phantom_detections": 0,
+ "phantoms_confirmed": 0,
+ "plan_check_violations": 0,
+ "plan_makespan_s_at_dt_nom": 56.0,
+ "plan_makespan_steps": 16,
+ "replans": 1,
+ "robots": {
+  "robot_1": {
+   "adg_wait_s": 0.350000000000005,
+   "cancels": 0,
+   "contacts": 0,
+   "estop": false,
+   "finish_s": 38.800000000000004,
+   "max_pos_err_m": 0.011241161490302342,
+   "passes": 8,
+   "scans": 500,
+   "state_time_s": {
+    "DONE": 61.55,
+    "MOVE": 38.5,
+    "STOP": 0.25
+   }
+  },
+  "robot_2": {
+   "adg_wait_s": 12.299999999999995,
+   "cancels": 0,
+   "contacts": 0,
+   "estop": false,
+   "finish_s": 46.9,
+   "max_pos_err_m": 0.011745341790471748,
+   "passes": 3,
+   "scans": 502,
+   "state_time_s": {
+    "DONE": 53.449999999999996,
+    "MOVE": 34.800000000000004,
+    "STOP": 0.29999999999999893,
+    "YIELD": 11.75
+   }
+  },
+  "robot_3": {
+   "adg_wait_s": 9.099999999999984,
+   "cancels": 0,
+   "contacts": 0,
+   "estop": false,
+   "finish_s": 100.3,
+   "max_pos_err_m": 0.011280265660269052,
+   "passes": 13,
+   "scans": 484,
+   "state_time_s": {
+    "DONE": 0.04999999999999716,
+    "MOVE": 91.5,
+    "STOP": 0.25,
+    "YIELD": 8.5
+   }
+  },
+  "robot_4": {
+   "adg_wait_s": 5.499999999999998,
+   "cancels": 0,
+   "contacts": 0,
+   "estop": false,
+   "finish_s": 63.1,
+   "max_pos_err_m": 0.010162038419309941,
+   "passes": 8,
+   "scans": 453,
+   "state_time_s": {
+    "DONE": 37.24999999999999,
+    "MOVE": 57.800000000000004,
+    "STOP": 0.25,
+    "YIELD": 5.000000000000002
+   }
+  },
+  "robot_5": {
+   "adg_wait_s": 2.099999999999998,
+   "cancels": 1,
+   "contacts": 0,
+   "estop": false,
+   "finish_s": 28.25,
+   "max_pos_err_m": 0.008827909292774449,
+   "passes": 5,
+   "scans": 430,
+   "state_time_s": {
+    "DONE": 72.1,
+    "MOVE": 26.200000000000003,
+    "STOP": 2.0
+   }
+  },
+  "robot_6": {
+   "adg_wait_s": 0.05000000000000071,
+   "cancels": 0,
+   "contacts": 0,
+   "estop": false,
+   "finish_s": 11.999999999999998,
+   "max_pos_err_m": 0.008835354089079537,
+   "passes": 1,
+   "scans": 474,
+   "state_time_s": {
+    "DONE": 88.35,
+    "MOVE": 11.950000000000001
+   }
+  }
+ },
+ "scenario": "corridor10_r6_s4_ob1",
+ "t_wait": 3.0
+}

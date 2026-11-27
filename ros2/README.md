@@ -108,3 +108,14 @@ ros2 run mapf_gazebo add_obstacle corridor10_r6_s1 --cell 5 1 --spawn 0.0 --suff
 - `--detection lidar`: 로봇 LiDAR 점으로 장애물 칸을 찾음(다른 로봇 ± 0.2 m 점, 선반·벽 면 4 cm 안 점은 버림), 최근 `t_wait` 동안 90% 이상 보이면 확정.
 - 실행 폴더마다 `replan_<n>.json`(재계획 입력·출력)이 생긴다.
 - RViz: 노란 반투명 상자 = LiDAR가 찾았지만 시나리오에 없는 칸(오탐). 결과: `results/7_3pt`, `7_4pt`, `7_5`, 해석: docs/31 31.24·31.25.
+
+## 7-6 본 실험 (docs/32)
+
+```
+# 기본 조건 + 조건 바꾸기 60번(녹화 포함, 2시간 남짓) — 스크립트 그대로 다시 돌릴 수 있음
+bash results/7_6/run_7_6.sh
+# 결과 표, 장애물 때문에 늘어난 시간을 볼 장애물 없는 기준은 시나리오 이름에서 _ob1을 뺀 것(예: corridor10_r6_s2)
+ros2 run mapf_gazebo summarize_runs results/7_6/base results/7_6/twait0 --csv x.csv
+ros2 run mapf_gazebo same_input_compare results/7_6/base     # 같은 재계획 입력에서 두 방법
+```
+결과: `results/7_6/`(`summary.csv`, `same_input.csv`, 녹화 `bag/`은 git에 없음), 해석: docs/32.

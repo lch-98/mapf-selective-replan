@@ -29,6 +29,7 @@ setup(
             'run_batch = mapf_gazebo.run_batch:main',
             'summarize_runs = mapf_gazebo.summarize_runs:main',
             'check_replan_input = mapf_gazebo.check_replan_input:main',
+            'same_input_compare = mapf_gazebo.same_input_compare:main',
             'add_obstacle = mapf_gazebo.add_obstacle:main',
             'make_scenario = mapf_gazebo.make_scenario:main',
             'grid_to_world = mapf_gazebo.grid_to_world:main',
